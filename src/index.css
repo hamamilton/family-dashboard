@@ -1,3 +1,6 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --text: #6b6375;
   --text-h: #08060d;
@@ -30,8 +33,7 @@
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
+:root.dark {
     --text: #9ca3af;
     --text-h: #f3f4f6;
     --bg: #16171d;
@@ -45,10 +47,9 @@
       rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
   }
 
-  #social .button-icon {
+  .dark #social .button-icon {
     filter: invert(1) brightness(2);
   }
-}
 
 body {
   margin: 0;
@@ -77,20 +78,24 @@ h1 {
   font-size: 56px;
   letter-spacing: -1.68px;
   margin: 32px 0;
+
   @media (max-width: 1024px) {
     font-size: 36px;
     margin: 20px 0;
   }
 }
+
 h2 {
   font-size: 24px;
   line-height: 118%;
   letter-spacing: -0.24px;
   margin: 0 0 8px;
+
   @media (max-width: 1024px) {
     font-size: 20px;
   }
 }
+
 p {
   margin: 0;
 }
@@ -108,4 +113,38 @@ code {
   line-height: 135%;
   padding: 4px 8px;
   background: var(--code-bg);
+}
+
+/* Custom Calendar Overrides */
+.custom-calendar-wrapper .rbc-calendar {
+  font-family: inherit;
+}
+.custom-calendar-wrapper .rbc-toolbar button {
+  color: inherit;
+}
+.dark .custom-calendar-wrapper .rbc-month-view,
+.dark .custom-calendar-wrapper .rbc-month-row,
+.dark .custom-calendar-wrapper .rbc-time-view,
+.dark .custom-calendar-wrapper .rbc-header,
+.dark .custom-calendar-wrapper .rbc-day-bg {
+  border-color: #164e63; /* cyan-900 */
+}
+.dark .custom-calendar-wrapper .rbc-off-range-bg {
+  background-color: #0f172a; /* slate-900 */
+}
+.dark .custom-calendar-wrapper .rbc-today {
+  background-color: rgba(34, 211, 238, 0.1); /* cyan-400/10 */
+}
+.custom-calendar-wrapper .rbc-event {
+  background: transparent;
+  padding: 0;
+}
+.dark .custom-calendar-wrapper .rbc-toolbar button {
+  color: #22d3ee; /* cyan-400 */
+}
+.dark .custom-calendar-wrapper .rbc-toolbar button:active,
+.dark .custom-calendar-wrapper .rbc-toolbar button.rbc-active {
+  background-color: #164e63;
+  color: #fff;
+  border-color: #22d3ee;
 }
