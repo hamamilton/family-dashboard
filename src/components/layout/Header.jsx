@@ -21,7 +21,7 @@ export function Header({ groupBy, setGroupBy, isDarkMode, toggleDarkMode }) {
                     </p>
                 </div>
 
-                <div className="hidden md:flex gap-4 items-center">
+                <div className="hidden md:flex gap-2 items-center">
                     <button
                         onClick={toggleDarkMode}
                         className="p-3 bg-white dark:bg-black border-2 border-slate-300 dark:border-cyan-800 text-slate-500 dark:text-cyan-400 hover:text-cyan-600 dark:hover:text-cyan-300 hover:border-cyan-400 transition-all shadow-sm dark:shadow-[0_0_15px_rgba(34,211,238,0.15)]"
