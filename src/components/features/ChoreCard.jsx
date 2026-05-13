@@ -1,4 +1,5 @@
-import { CheckSquare, Square } from 'lucide-react';
+import { CheckSquare, Square, AlertCircle } from 'lucide-react';
+import { getDaysLate } from '../../hooks/useChores';
 
 export function ChoreCard({ chore, onToggle }) {
     return (
@@ -16,11 +17,20 @@ export function ChoreCard({ chore, onToggle }) {
                         }`}>
                         {chore.chore_name}
                     </h3>
-                    <p className={`text-sm tracking-[0.2em] font-bold mt-2 ${chore.is_completed ? 'text-emerald-700 dark:text-emerald-900' : 'text-fuchsia-600 dark:text-fuchsia-500'
-                        }`}>
-                        <span className="text-slate-400 dark:text-slate-600 mr-2">&gt;</span>
-                        {chore.assigned_to}
-                    </p>
+                    <div className="flex justify-between items-center mt-2">
+                        <p className={`text-sm tracking-[0.2em] font-bold ${chore.is_completed ? 'text-emerald-700 dark:text-emerald-900' : 'text-fuchsia-600 dark:text-fuchsia-500'
+                            }`}>
+                            <span className="text-slate-400 dark:text-slate-600 mr-2">&gt;</span>
+                            {chore.assigned_to}
+                        </p>
+                        
+                        {!chore.is_completed && getDaysLate(chore) > 0 && (
+                            <div className="flex items-center gap-1 text-[10px] bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400 px-2 py-1 font-bold tracking-widest border border-red-300 dark:border-red-800 animate-pulse">
+                                <AlertCircle size={12} />
+                                -{getDaysLate(chore) * 15}% XP
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 <div className="mt-6 flex justify-between items-end w-full">

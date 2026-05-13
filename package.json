@@ -15,7 +15,8 @@
     "pocketbase": "^0.26.8",
     "react": "^19.2.5",
     "react-big-calendar": "^1.19.4",
-    "react-dom": "^19.2.5"
+    "react-dom": "^19.2.5",
+    "react-grid-layout": "^2.2.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

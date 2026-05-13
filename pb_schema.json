@@ -1,0 +1,58 @@
+[
+  {
+    "name": "events",
+    "type": "base",
+    "system": false,
+    "schema": [
+      { "id": "ev1", "name": "title", "type": "text", "required": true, "options": { "min": null, "max": null, "pattern": "" } },
+      { "id": "ev2", "name": "date", "type": "text", "required": true, "options": { "min": null, "max": null, "pattern": "" } },
+      { "id": "ev3", "name": "assignee", "type": "text", "required": false, "options": { "min": null, "max": null, "pattern": "" } },
+      { "id": "ev4", "name": "color", "type": "text", "required": false, "options": { "min": null, "max": null, "pattern": "" } }
+    ],
+    "listRule": "", "viewRule": "", "createRule": "", "updateRule": "", "deleteRule": ""
+  },
+  {
+    "name": "meals",
+    "type": "base",
+    "system": false,
+    "schema": [
+      { "id": "m1", "name": "day", "type": "text", "required": true, "options": { "min": null, "max": null, "pattern": "" } },
+      { "id": "m2", "name": "main_dish", "type": "text", "required": false, "options": { "min": null, "max": null, "pattern": "" } },
+      { "id": "m3", "name": "side_dish", "type": "text", "required": false, "options": { "min": null, "max": null, "pattern": "" } }
+    ],
+    "listRule": "", "viewRule": "", "createRule": "", "updateRule": "", "deleteRule": ""
+  },
+  {
+    "name": "groceries",
+    "type": "base",
+    "system": false,
+    "schema": [
+      { "id": "g1", "name": "name", "type": "text", "required": true, "options": { "min": null, "max": null, "pattern": "" } },
+      { "id": "g2", "name": "is_checked", "type": "bool", "required": false, "options": {} }
+    ],
+    "listRule": "", "viewRule": "", "createRule": "", "updateRule": "", "deleteRule": ""
+  },
+  {
+    "name": "chores",
+    "type": "base",
+    "system": false,
+    "schema": [
+      { "id": "c1", "name": "chore_name", "type": "text", "required": true, "options": { "min": null, "max": null, "pattern": "" } },
+      { "id": "c2", "name": "assigned_to", "type": "text", "required": false, "options": { "min": null, "max": null, "pattern": "" } },
+      { "id": "c3", "name": "is_completed", "type": "bool", "required": false, "options": {} },
+      { "id": "c4", "name": "xp_reward", "type": "number", "required": false, "options": { "min": null, "max": null, "noDecimal": false } }
+    ],
+    "listRule": "", "viewRule": "", "createRule": "", "updateRule": "", "deleteRule": ""
+  },
+  {
+    "name": "profiles",
+    "type": "base",
+    "system": false,
+    "schema": [
+      { "id": "p1", "name": "name", "type": "text", "required": true, "options": { "min": null, "max": null, "pattern": "" } },
+      { "id": "p2", "name": "xp_balance", "type": "number", "required": false, "options": { "min": null, "max": null, "noDecimal": false } },
+      { "id": "p3", "name": "is_op", "type": "bool", "required": false, "options": {} }
+    ],
+    "listRule": "", "viewRule": "", "createRule": "", "updateRule": "", "deleteRule": ""
+  }
+]

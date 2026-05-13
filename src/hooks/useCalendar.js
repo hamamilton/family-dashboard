@@ -43,13 +43,30 @@ const getMockEvents = () => {
     ];
 };
 
+const loadLocalEvents = () => {
+    const localData = localStorage.getItem('family_dashboard_events');
+    if (localData) {
+        try {
+            const parsed = JSON.parse(localData);
+            return parsed.map(e => ({
+                ...e,
+                start: new Date(e.start),
+                end: new Date(e.end)
+            }));
+        } catch (e) {
+            return getMockEvents();
+        }
+    }
+    return getMockEvents();
+};
+
 export function useCalendar() {
-    const [events, setEvents] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [events, setEvents] = useState(loadLocalEvents());
+    const [loading, setLoading] = useState(false); // Data is loaded synchronously locally
 
     const fetchEvents = useCallback(async () => {
         try {
-            // Try to fetch from pocketbase
+            // Fetch from PocketBase via Ngrok
             const records = await pb.collection('events').getFullList({ sort: 'start' });
             
             // Format dates for react-big-calendar
@@ -60,9 +77,11 @@ export function useCalendar() {
             }));
             
             setEvents(formattedRecords);
+            // Sync the real data back to local storage
+            localStorage.setItem('family_dashboard_events', JSON.stringify(formattedRecords));
         } catch (err) {
-            console.warn("Could not fetch events from Pocketbase (collection might not exist yet). Using mock data.", err);
-            setEvents(getMockEvents());
+            console.warn("Could not fetch events from Pocketbase. Falling back to local data.", err);
+            // We already loaded local data on mount, so no need to do anything here
         } finally {
             setLoading(false);
         }
@@ -90,8 +109,12 @@ export function useCalendar() {
     const addEvent = async (newEvent) => {
         const eventWithId = { ...newEvent, id: `temp-${Date.now()}` };
         
-        // Optimistically update local state
-        setEvents(prev => [...prev, eventWithId]);
+        // Optimistically update local state and save to localStorage as fallback
+        setEvents(prev => {
+            const next = [...prev, eventWithId];
+            localStorage.setItem('family_dashboard_events', JSON.stringify(next));
+            return next;
+        });
 
         try {
             // Try saving to pocketbase
@@ -114,5 +137,47 @@ export function useCalendar() {
         }
     };
 
-    return { events, loading, addEvent };
+    const deleteEvent = async (id) => {
+        setEvents(prev => {
+            const next = prev.filter(e => e.id !== id);
+            localStorage.setItem('family_dashboard_events', JSON.stringify(next));
+            return next;
+        });
+
+        if (!id.startsWith('temp-') && !id.startsWith('mock-')) {
+            try {
+                await pb.collection('events').delete(id);
+            } catch (err) {
+                console.warn("Could not delete from Pocketbase.", err);
+            }
+        }
+    };
+
+    const updateEvent = async (id, updatedData) => {
+        const optimisticEvent = {
+            ...updatedData,
+            start: new Date(updatedData.start),
+            end: new Date(updatedData.end)
+        };
+
+        setEvents(prev => {
+            const next = prev.map(e => e.id === id ? { ...e, ...optimisticEvent } : e);
+            localStorage.setItem('family_dashboard_events', JSON.stringify(next));
+            return next;
+        });
+
+        if (!id.startsWith('temp-') && !id.startsWith('mock-')) {
+            try {
+                await pb.collection('events').update(id, {
+                    ...updatedData,
+                    start: new Date(updatedData.start).toISOString(),
+                    end: new Date(updatedData.end).toISOString()
+                });
+            } catch (err) {
+                console.warn("Could not update in Pocketbase.", err);
+            }
+        }
+    };
+
+    return { events, loading, addEvent, deleteEvent, updateEvent };
 }

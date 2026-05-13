@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Calendar as CalendarIcon, Clock, Loader2, X } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, Loader2, X, GripHorizontal } from 'lucide-react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import format from 'date-fns/format';
 import parse from 'date-fns/parse';
@@ -43,18 +43,22 @@ const EventComponent = ({ event, profiles }) => {
 };
 
 export function CalendarView({ profiles = [] }) {
-    const { events, loading, addEvent } = useCalendar();
+    const { events, loading, addEvent, deleteEvent, updateEvent } = useCalendar();
     
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [newEventData, setNewEventData] = useState({
+        id: null,
         title: '',
         start: '',
         end: '',
         assigned_to: 'Everyone'
     });
+    const [view, setView] = useState('month');
+    const [date, setDate] = useState(new Date());
 
     const handleSelectSlot = (slotInfo) => {
         setNewEventData({
+            id: null,
             title: '',
             start: format(slotInfo.start, "yyyy-MM-dd'T'HH:mm"),
             end: format(slotInfo.end, "yyyy-MM-dd'T'HH:mm"),
@@ -63,14 +67,41 @@ export function CalendarView({ profiles = [] }) {
         setIsModalOpen(true);
     };
 
+    const handleSelectEvent = (event) => {
+        setNewEventData({
+            id: event.id,
+            title: event.title,
+            start: format(event.start, "yyyy-MM-dd'T'HH:mm"),
+            end: format(event.end, "yyyy-MM-dd'T'HH:mm"),
+            assigned_to: event.assigned_to
+        });
+        setIsModalOpen(true);
+    };
+
+    const handleDelete = () => {
+        if (newEventData.id) {
+            deleteEvent(newEventData.id);
+            setIsModalOpen(false);
+        }
+    };
+
     const handleSubmit = (e) => {
         e.preventDefault();
-        addEvent({
-            title: newEventData.title,
-            start: new Date(newEventData.start),
-            end: new Date(newEventData.end),
-            assigned_to: newEventData.assigned_to
-        });
+        if (newEventData.id) {
+            updateEvent(newEventData.id, {
+                title: newEventData.title,
+                start: new Date(newEventData.start),
+                end: new Date(newEventData.end),
+                assigned_to: newEventData.assigned_to
+            });
+        } else {
+            addEvent({
+                title: newEventData.title,
+                start: new Date(newEventData.start),
+                end: new Date(newEventData.end),
+                assigned_to: newEventData.assigned_to
+            });
+        }
         setIsModalOpen(false);
     };
 
@@ -84,9 +115,10 @@ export function CalendarView({ profiles = [] }) {
     }
 
     return (
-        <div className="animate-in fade-in zoom-in-95 duration-700 font-mono relative">
+        <div className="animate-in fade-in zoom-in-95 duration-700 font-mono relative flex flex-col h-full p-6">
 
-            <div className="flex items-center gap-6 mb-8">
+            <div className="flex items-center gap-6 mb-8 flex-none">
+                <GripHorizontal size={24} className="drag-handle cursor-grab active:cursor-grabbing text-slate-400 hover:text-cyan-400 transition-colors flex-none" />
                 <h2 className="text-3xl font-black uppercase tracking-widest text-cyan-600 dark:text-cyan-400 drop-shadow-sm dark:drop-shadow-[0_0_10px_rgba(34,211,238,0.6)]">
                     &gt; Master Schedule
                 </h2>
@@ -99,18 +131,23 @@ export function CalendarView({ profiles = [] }) {
                 </div>
             </div>
 
-            <div className="bg-white dark:bg-black p-6 border-2 border-slate-300 dark:border-cyan-900 shadow-lg dark:shadow-[0_0_30px_rgba(34,211,238,0.1)] custom-calendar-wrapper">
+            <div className="flex-1 min-h-0 bg-white dark:bg-black p-6 border-2 border-slate-300 dark:border-cyan-900 shadow-lg dark:shadow-[0_0_30px_rgba(34,211,238,0.1)] custom-calendar-wrapper">
                 <Calendar
                     localizer={localizer}
                     events={events}
                     startAccessor="start"
                     endAccessor="end"
-                    style={{ height: 650 }}
+                    style={{ height: '100%' }}
                     components={{
                         event: (props) => <EventComponent {...props} profiles={profiles} />
                     }}
                     selectable={true}
                     onSelectSlot={handleSelectSlot}
+                    onSelectEvent={handleSelectEvent}
+                    view={view}
+                    onView={setView}
+                    date={date}
+                    onNavigate={setDate}
                 />
             </div>
 
@@ -119,7 +156,9 @@ export function CalendarView({ profiles = [] }) {
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="bg-white dark:bg-slate-950 border-2 border-cyan-400 p-8 w-full max-w-md shadow-[0_0_30px_rgba(34,211,238,0.2)]" style={{ clipPath: 'polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px)' }}>
                         <div className="flex justify-between items-center mb-6 border-b border-slate-200 dark:border-slate-800 pb-4">
-                            <h3 className="text-xl font-black uppercase tracking-widest text-slate-800 dark:text-white">Add Event</h3>
+                            <h3 className="text-xl font-black uppercase tracking-widest text-slate-800 dark:text-white">
+                                {newEventData.id ? 'Update Event' : 'Add Event'}
+                            </h3>
                             <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-fuchsia-500 transition-colors">
                                 <X size={24} />
                             </button>
@@ -138,8 +177,8 @@ export function CalendarView({ profiles = [] }) {
                                 />
                             </div>
 
-                            <div className="flex gap-4">
-                                <div className="flex-1">
+                            <div className="flex flex-col gap-6">
+                                <div>
                                     <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-cyan-600 mb-2">Start</label>
                                     <input 
                                         type="datetime-local" 
@@ -149,7 +188,7 @@ export function CalendarView({ profiles = [] }) {
                                         className="w-full bg-slate-50 dark:bg-black border border-slate-300 dark:border-slate-800 p-3 text-sm text-slate-800 dark:text-white focus:outline-none focus:border-cyan-400 transition-colors"
                                     />
                                 </div>
-                                <div className="flex-1">
+                                <div>
                                     <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-cyan-600 mb-2">End</label>
                                     <input 
                                         type="datetime-local" 
@@ -175,13 +214,25 @@ export function CalendarView({ profiles = [] }) {
                                 </select>
                             </div>
 
-                            <button 
-                                type="submit" 
-                                className="mt-4 w-full bg-cyan-500 text-black font-black uppercase tracking-widest py-4 hover:bg-cyan-400 transition-colors shadow-[0_0_15px_rgba(34,211,238,0.4)]"
-                                style={{ clipPath: 'polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)' }}
-                            >
-                                Create Event
-                            </button>
+                            <div className="flex gap-4 mt-4">
+                                {newEventData.id && (
+                                    <button 
+                                        type="button" 
+                                        onClick={handleDelete}
+                                        className="flex-1 bg-transparent border-2 border-rose-500 text-rose-500 font-black uppercase tracking-widest py-4 hover:bg-rose-500 hover:text-white transition-colors"
+                                        style={{ clipPath: 'polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)' }}
+                                    >
+                                        Delete
+                                    </button>
+                                )}
+                                <button 
+                                    type="submit" 
+                                    className="flex-1 bg-cyan-500 text-black font-black uppercase tracking-widest py-4 hover:bg-cyan-400 transition-colors shadow-[0_0_15px_rgba(34,211,238,0.4)]"
+                                    style={{ clipPath: 'polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)' }}
+                                >
+                                    {newEventData.id ? 'Save' : 'Create'}
+                                </button>
+                            </div>
                         </form>
                     </div>
                 </div>
