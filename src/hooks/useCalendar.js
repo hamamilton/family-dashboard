@@ -1,48 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { pb } from '../lib/pocketbase';
 
-// Generate some mock events based on the current date so they always show up
-const getMockEvents = () => {
-    const today = new Date();
-    const currentYear = today.getFullYear();
-    const currentMonth = today.getMonth();
-
-    return [
-        {
-            id: 'mock-1',
-            title: '⚽ Soccer Practice (Leo)',
-            start: new Date(currentYear, currentMonth, today.getDate() + 1, 16, 0),
-            end: new Date(currentYear, currentMonth, today.getDate() + 1, 17, 30),
-            type: 'activity',
-            assigned_to: 'Leo'
-        },
-        {
-            id: 'mock-2',
-            title: '🦷 Dentist Appointment (Sam)',
-            start: new Date(currentYear, currentMonth, today.getDate() + 3, 10, 0),
-            end: new Date(currentYear, currentMonth, today.getDate() + 3, 11, 0),
-            type: 'appointment',
-            assigned_to: 'Sam'
-        },
-        {
-            id: 'mock-3',
-            title: '🍕 Family Pizza Night',
-            start: new Date(currentYear, currentMonth, today.getDate() + 5, 18, 0),
-            end: new Date(currentYear, currentMonth, today.getDate() + 5, 20, 0),
-            type: 'family',
-            assigned_to: 'Everyone'
-        },
-        {
-            id: 'mock-4',
-            title: '🎸 Guitar Lesson (Sam)',
-            start: new Date(currentYear, currentMonth, today.getDate() - 2, 15, 30),
-            end: new Date(currentYear, currentMonth, today.getDate() - 2, 16, 30),
-            type: 'activity',
-            assigned_to: 'Sam'
-        }
-    ];
-};
-
 const loadLocalEvents = () => {
     const localData = localStorage.getItem('family_dashboard_events');
     if (localData) {
@@ -54,10 +12,10 @@ const loadLocalEvents = () => {
                 end: new Date(e.end)
             }));
         } catch (e) {
-            return getMockEvents();
+            return [];
         }
     }
-    return getMockEvents();
+    return [];
 };
 
 export function useCalendar() {
@@ -66,22 +24,29 @@ export function useCalendar() {
 
     const fetchEvents = useCallback(async () => {
         try {
-            // Fetch from PocketBase via Ngrok
-            const records = await pb.collection('events').getFullList({ sort: 'start' });
+            const records = await pb.collection('events').getFullList({ sort: 'date' });
             
-            // Format dates for react-big-calendar
-            const formattedRecords = records.map(record => ({
-                ...record,
-                start: new Date(record.start),
-                end: new Date(record.end)
-            }));
+            const formattedRecords = records.map(record => {
+                // Support both 'date' field (what we create) and legacy 'start'/'end' fields
+                const startDate = new Date(record.date || record.start);
+                const endDate = record.end 
+                    ? new Date(record.end) 
+                    : new Date(startDate.getTime() + 60 * 60 * 1000); // Default: 1hr duration
+
+                return {
+                    ...record,
+                    // Map 'assignee' field back to 'assigned_to' for the EventComponent
+                    assigned_to: record.assignee || record.assigned_to || 'Everyone',
+                    start: startDate,
+                    end: endDate,
+                };
+            }).filter(e => !isNaN(e.start.getTime())); // Remove any records with invalid dates
             
+            console.log(`Fetched ${formattedRecords.length} calendar events from PocketBase`);
             setEvents(formattedRecords);
-            // Sync the real data back to local storage
             localStorage.setItem('family_dashboard_events', JSON.stringify(formattedRecords));
         } catch (err) {
-            console.warn("Could not fetch events from Pocketbase. Falling back to local data.", err);
-            // We already loaded local data on mount, so no need to do anything here
+            console.warn("Could not fetch events from Pocketbase.", err);
         } finally {
             setLoading(false);
         }
@@ -89,27 +54,13 @@ export function useCalendar() {
 
     useEffect(() => {
         fetchEvents();
-        
-        // Setup realtime subscription if collection exists
-        try {
-            pb.collection('events').subscribe('*', fetchEvents);
-        } catch (err) {
-            // Ignore if collection doesn't exist
-        }
-
-        return () => {
-            try {
-                pb.collection('events').unsubscribe();
-            } catch (err) {
-                // Ignore
-            }
-        };
+        pb.collection('events').subscribe('*', fetchEvents);
+        return () => pb.collection('events').unsubscribe();
     }, [fetchEvents]);
 
     const addEvent = async (newEvent) => {
         const eventWithId = { ...newEvent, id: `temp-${Date.now()}` };
         
-        // Optimistically update local state and save to localStorage as fallback
         setEvents(prev => {
             const next = [...prev, eventWithId];
             localStorage.setItem('family_dashboard_events', JSON.stringify(next));
@@ -117,21 +68,14 @@ export function useCalendar() {
         });
 
         try {
-            // Try saving to pocketbase
-            const record = await pb.collection('events').create({
+            await pb.collection('events').create({
                 title: newEvent.title,
-                start: newEvent.start.toISOString(),
-                end: newEvent.end.toISOString(),
-                assigned_to: newEvent.assigned_to,
-                type: 'activity'
+                date: newEvent.start.toISOString(),
+                assignee: newEvent.assigned_to,
+                color: newEvent.color || '',
             });
-            
-            // Replace optimistic event with real one
-            setEvents(prev => prev.map(e => e.id === eventWithId.id ? {
-                ...record,
-                start: new Date(record.start),
-                end: new Date(record.end)
-            } : e));
+            // Refetch to get real record with server ID
+            await fetchEvents();
         } catch (err) {
             console.warn("Could not save to Pocketbase. Event exists only locally.", err);
         }

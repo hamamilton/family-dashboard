@@ -54,16 +54,8 @@ export function useMeals() {
 
     useEffect(() => {
         fetchMeals();
-        try {
-            pb.collection('meals').subscribe('*', fetchMeals);
-        } catch (err) {
-            // Ignore
-        }
-        return () => {
-            try {
-                pb.collection('meals').unsubscribe();
-            } catch (err) { }
-        };
+        pb.collection('meals').subscribe('*', fetchMeals);
+        return () => pb.collection('meals').unsubscribe();
     }, [fetchMeals]);
 
     const updateMeal = async (day, field, value) => {

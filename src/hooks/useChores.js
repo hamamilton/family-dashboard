@@ -59,7 +59,7 @@ export function useChores(groupBy) {
     const fetchData = useCallback(async () => {
         try {
             const [rawChoreList, profileList] = await Promise.all([
-                pb.collection('chores').getFullList({ sort: '-created' }),
+                pb.collection('chores').getFullList({ sort: '-created', expand: 'round_robin_pool,assigned_to' }),
                 pb.collection('profiles').getFullList()
             ]);
 
@@ -95,26 +95,61 @@ export function useChores(groupBy) {
             });
 
             if (choresToReset.length > 0) {
-                await Promise.all(choresToReset.map(c => {
+                await Promise.all(choresToReset.map(async (c, index) => {
                     let updateData = { is_completed: false };
                     
-                    if (c.round_robin_pool) {
-                        let pool = [];
-                        if (Array.isArray(c.round_robin_pool)) pool = c.round_robin_pool;
-                        else if (typeof c.round_robin_pool === 'string') pool = c.round_robin_pool.split(',').map(n => n.trim());
-                        
+                    // Use round_robin_pool if it exists, otherwise fall back to all profiles
+                    let pool = [];
+                    if (c.expand?.round_robin_pool) {
+                        // Relation field — use expanded profile names
+                        pool = c.expand.round_robin_pool.map(p => p.name);
+                    } else if (c.round_robin_pool) {
+                        // Legacy text field fallback
+                        if (typeof c.round_robin_pool === 'string') pool = c.round_robin_pool.split(',').map(n => n.trim());
+                    } else {
+                        pool = profileList.map(p => p.name);
+                    }
+                    
+                    if (pool.length > 0) {
                         if (pool.length > 1) {
-                            const currentIdx = pool.indexOf(c.assigned_to);
+                            // Find current assigned person's name
+                            const currentAssignedName = c.expand?.assigned_to?.name || c.assigned_to;
+                            const currentIdx = pool.indexOf(currentAssignedName);
                             const nextIdx = currentIdx === -1 ? 0 : (currentIdx + 1) % pool.length;
-                            updateData.assigned_to = pool[nextIdx];
+                            const nextName = pool[nextIdx];
+                            
+                            // Find the profile ID for this name to save as relation
+                            const nextProfile = profileList.find(p => p.name === nextName);
+                            updateData.assigned_to = nextProfile ? nextProfile.id : nextName;
                         } else if (pool.length === 1) {
-                            updateData.assigned_to = pool[0];
+                            const p = profileList.find(p => p.name === pool[0]);
+                            updateData.assigned_to = p ? p.id : pool[0];
                         }
                     }
 
                     return pb.collection('chores').update(c.id, updateData);
                 }));
                 fetchData(); // Refetch cleanly
+                return;
+            }
+
+            // 1.5. Assign unassigned chores
+            const unassignedChores = rawChoreList.filter(c => !c.assigned_to);
+            if (unassignedChores.length > 0) {
+                await Promise.all(unassignedChores.map(async (c, index) => {
+                    let pool = [];
+                    if (c.expand?.round_robin_pool) {
+                        pool = c.expand.round_robin_pool; // Array of profile objects
+                    } else {
+                        pool = profileList; // Fallback to all profile objects
+                    }
+                    
+                    if (pool.length > 0) {
+                        const assignedProfile = pool[index % pool.length];
+                        return pb.collection('chores').update(c.id, { assigned_to: assignedProfile.id });
+                    }
+                }));
+                fetchData(); 
                 return;
             }
 
@@ -150,7 +185,8 @@ export function useChores(groupBy) {
             const bdays = profileList.filter(p => p.birthday === todayMMDD);
             setBirthdayProfiles(bdays.map(p => p.name));
         } catch (err) {
-            console.error("Sync failed:", err);
+            console.error("Fetch error:", err);
+            setLoading(false);
         } finally {
             setLoading(false);
         }
@@ -162,10 +198,11 @@ export function useChores(groupBy) {
         const newStatus = !currentStatus;
 
         try {
+            // Optimistically update UI immediately
+            setChores(prev => prev.map(c => c.id === choreId ? { ...c, is_completed: newStatus } : c));
+
             // 1. Always update the chore status first
-            await pb.collection('chores').update(choreId, {
-                is_completed: newStatus
-            });
+            await pb.collection('chores').update(choreId, { is_completed: newStatus });
 
             // 2. Only try to update XP if a profile exists and we are CHECKING the box
             if (profile && newStatus) {
@@ -190,12 +227,15 @@ export function useChores(groupBy) {
 
             console.log(`Success: ${chore.chore_name} toggled to ${newStatus}`);
         } catch (err) {
-            console.error("The Raspberry Pi rejected the update:", err);
+            // Revert optimistic update on failure
+            setChores(prev => prev.map(c => c.id === choreId ? { ...c, is_completed: currentStatus } : c));
+            console.error("Update failed:", err);
         }
     };
 
     useEffect(() => {
         fetchData();
+        // Realtime subscriptions (works now that we're on Fly.io, not Ngrok)
         pb.collection('chores').subscribe('*', fetchData);
         pb.collection('profiles').subscribe('*', fetchData);
         return () => {
@@ -205,7 +245,11 @@ export function useChores(groupBy) {
     }, [fetchData]);
 
     // (Keep your groupedChores and sortedGroupEntries logic here)
-    const groupedChores = chores.reduce((acc, chore) => {
+    const groupedChores = chores.map(c => ({
+        ...c,
+        // Ensure assigned_to display is the name, not the ID
+        assigned_to: c.expand?.assigned_to?.name || c.assigned_to
+    })).reduce((acc, chore) => {
         const key = chore[groupBy] || 'Uncategorized';
         if (!acc[key]) acc[key] = [];
         acc[key].push(chore);

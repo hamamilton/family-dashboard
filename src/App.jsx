@@ -7,6 +7,8 @@ import { CalendarView } from './components/views/CalendarView';
 import { GroceryList } from './components/features/GroceryList';
 import { MealPlanner } from './components/features/MealPlanner';
 import { PhotoAlbum } from './components/features/PhotoAlbum';
+import { AgentProfiles } from './components/features/AgentProfiles';
+import { AdminPanel } from './components/features/AdminPanel';
 import { RefreshCw } from 'lucide-react';
 import { Responsive, useContainerWidth } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
@@ -37,6 +39,7 @@ function App() {
   }, [isDarkMode]);
 
   const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
+  const [adminOpen, setAdminOpen] = useState(false);
 
   const { sortedGroupEntries, loading, toggleChore, chores, profiles, todayHoliday, birthdayProfiles } = useChores(groupBy);
   const { layouts, onLayoutChange } = useLayout();
@@ -48,8 +51,10 @@ function App() {
         groupBy={groupBy} 
         setGroupBy={setGroupBy} 
         isDarkMode={isDarkMode} 
-        toggleDarkMode={toggleDarkMode} 
+        toggleDarkMode={toggleDarkMode}
+        onAdminOpen={() => setAdminOpen(true)}
       />
+      <AdminPanel isOpen={adminOpen} onClose={() => setAdminOpen(false)} />
 
       {todayHoliday && (
         <div className="bg-gradient-to-r from-fuchsia-600 via-purple-600 to-cyan-600 text-white font-black uppercase tracking-[0.3em] p-3 text-center text-sm md:text-base border-b-4 border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.5)] z-10 flex-none">
@@ -82,6 +87,14 @@ function App() {
               draggableHandle=".drag-handle"
               margin={[24, 24]}
             >
+            <div key="agents" className="flex flex-col h-full bg-white dark:bg-black border-2 border-slate-300 dark:border-cyan-900 shadow-lg">
+              <AgentProfiles
+                profiles={profiles}
+                chores={chores}
+                birthdayProfiles={birthdayProfiles}
+              />
+            </div>
+
             <div key="chores" className="flex flex-col h-full bg-white dark:bg-black border-2 border-slate-300 dark:border-cyan-900 shadow-lg">
               <ChoreGrid
                 sortedGroupEntries={sortedGroupEntries}

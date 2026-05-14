@@ -37,16 +37,8 @@ export function useGroceries() {
 
     useEffect(() => {
         fetchGroceries();
-        try {
-            pb.collection('groceries').subscribe('*', fetchGroceries);
-        } catch (err) {
-            // Ignore if collection doesn't exist
-        }
-        return () => {
-            try {
-                pb.collection('groceries').unsubscribe();
-            } catch (err) { }
-        };
+        pb.collection('groceries').subscribe('*', fetchGroceries);
+        return () => pb.collection('groceries').unsubscribe();
     }, [fetchGroceries]);
 
     const addGrocery = async (name) => {

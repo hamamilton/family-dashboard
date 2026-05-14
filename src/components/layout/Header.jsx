@@ -1,7 +1,7 @@
-import { User, Calendar as CalendarIcon, Repeat, Sun, Moon } from 'lucide-react';
+import { User, Calendar as CalendarIcon, Repeat, Sun, Moon, Shield } from 'lucide-react';
 import { WeatherWidget } from '../features/WeatherWidget';
 
-export function Header({ groupBy, setGroupBy, isDarkMode, toggleDarkMode }) {
+export function Header({ groupBy, setGroupBy, isDarkMode, toggleDarkMode, onAdminOpen }) {
     const tabs = [
         { id: 'assigned_to', label: 'By Person', icon: <User size={18} /> },
         { id: 'day_due', label: 'By Day', icon: <CalendarIcon size={18} /> },
@@ -29,6 +29,15 @@ export function Header({ groupBy, setGroupBy, isDarkMode, toggleDarkMode }) {
                         aria-label="Toggle Dark Mode"
                     >
                         {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+                    </button>
+                    <button
+                        onClick={onAdminOpen}
+                        className="p-3 bg-white dark:bg-black border-2 border-slate-300 dark:border-fuchsia-900 text-slate-500 dark:text-fuchsia-500 hover:text-fuchsia-600 dark:hover:text-fuchsia-300 hover:border-fuchsia-400 transition-all shadow-sm"
+                        style={{ clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%)' }}
+                        aria-label="Admin Panel"
+                        title="Admin Panel"
+                    >
+                        <Shield size={20} />
                     </button>
                     <WeatherWidget />
                 </div>
@@ -59,7 +68,15 @@ export function Header({ groupBy, setGroupBy, isDarkMode, toggleDarkMode }) {
                 >
                     {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
                 </button>
-                <div className="flex-2">
+                <button
+                    onClick={onAdminOpen}
+                    className="p-3 bg-white dark:bg-black border-2 border-slate-300 dark:border-fuchsia-900 text-slate-500 dark:text-fuchsia-500 hover:text-fuchsia-600 hover:border-fuchsia-400 transition-all"
+                    style={{ clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%)' }}
+                    aria-label="Admin Panel"
+                >
+                    <Shield size={20} />
+                </button>
+                <div className="flex-1">
                     <WeatherWidget />
                 </div>
             </div>

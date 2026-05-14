@@ -21,7 +21,7 @@ export function ChoreCard({ chore, onToggle }) {
                         <p className={`text-sm tracking-[0.2em] font-bold ${chore.is_completed ? 'text-emerald-700 dark:text-emerald-900' : 'text-fuchsia-600 dark:text-fuchsia-500'
                             }`}>
                             <span className="text-slate-400 dark:text-slate-600 mr-2">&gt;</span>
-                            {chore.assigned_to}
+                            {chore.assigned_to || 'UNASSIGNED'}
                         </p>
                         
                         {!chore.is_completed && getDaysLate(chore) > 0 && (
