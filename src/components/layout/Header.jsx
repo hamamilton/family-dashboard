@@ -1,13 +1,7 @@
 import { User, Calendar as CalendarIcon, Repeat, Sun, Moon, Shield, Maximize } from 'lucide-react';
 import { WeatherWidget } from '../features/WeatherWidget';
 
-export function Header({ groupBy, setGroupBy, isDarkMode, toggleDarkMode, onAdminOpen }) {
-    const tabs = [
-        { id: 'assigned_to', label: 'By Person', icon: <User size={18} /> },
-        { id: 'day_due', label: 'By Day', icon: <CalendarIcon size={18} /> },
-        { id: 'frequency', label: 'Frequency', icon: <Repeat size={18} /> }
-    ];
-
+export function Header({ isDarkMode, toggleDarkMode, onAdminOpen }) {
     const toggleFullscreen = () => {
         if (!document.fullscreenElement) {
             document.documentElement.requestFullscreen().catch(err => {
@@ -64,21 +58,6 @@ export function Header({ groupBy, setGroupBy, isDarkMode, toggleDarkMode, onAdmi
                 </div>
             </div>
 
-            <div className="flex bg-white dark:bg-black p-1.5 border-2 border-slate-300 dark:border-cyan-900 shadow-sm dark:shadow-[0_0_20px_rgba(34,211,238,0.1)] xl:self-center w-full md:w-auto overflow-x-auto" style={{ clipPath: 'polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)' }}>
-                {tabs.map((tab) => (
-                    <button
-                        key={tab.id}
-                        onClick={() => setGroupBy(tab.id)}
-                        className={`flex items-center whitespace-nowrap gap-2 px-4 py-2 text-xs md:px-6 md:py-3 md:text-sm font-black transition-all duration-300 tracking-widest ${groupBy === tab.id
-                            ? 'bg-cyan-50 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-400 dark:shadow-[0_0_15px_rgba(34,211,238,0.3)] shadow-sm'
-                            : 'text-slate-500 hover:text-fuchsia-600 dark:hover:text-fuchsia-400 border border-transparent'
-                            }`}
-                    >
-                        {tab.icon}
-                        {tab.label}
-                    </button>
-                ))}
-            </div>
 
             <div className="flex md:hidden w-full mt-2 gap-4">
                 <button

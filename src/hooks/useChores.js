@@ -249,10 +249,25 @@ export function useChores(groupBy) {
     }, [fetchData]);
 
     // (Keep your groupedChores and sortedGroupEntries logic here)
-    const groupedChores = chores.map(c => ({
-        ...c,
-        assigned_to: c.assigned_to
-    })).reduce((acc, chore) => {
+    const groupedChores = chores.map(c => {
+        let day_due = 'Uncategorized';
+        if (c.frequency === 'daily') day_due = 'Daily';
+        else if (c.frequency === 'weekly') {
+            if (Array.isArray(c.due_dates) && c.due_dates.length > 0) day_due = c.due_dates.join(', ');
+            else if (typeof c.due_dates === 'string' && c.due_dates) day_due = c.due_dates;
+            else day_due = 'Weekly';
+        } else if (c.frequency === 'monthly') {
+            day_due = 'Monthly';
+        } else if (c.frequency === 'none' || !c.frequency) {
+            day_due = 'One-off Tasks';
+        }
+
+        return {
+            ...c,
+            assigned_to: c.assigned_to,
+            day_due: day_due
+        };
+    }).reduce((acc, chore) => {
         const key = chore[groupBy] || 'Uncategorized';
         if (!acc[key]) acc[key] = [];
         acc[key].push(chore);

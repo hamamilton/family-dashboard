@@ -18,7 +18,7 @@ import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 
 function App() {
-  const [groupBy, setGroupBy] = useState('assigned_to');
+  const [groupBy, setGroupBy] = useState('day_due');
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
       const savedTheme = localStorage.getItem('theme');
@@ -57,8 +57,6 @@ function App() {
     } bg-[linear-gradient(to_right,#0891b220_1px,transparent_1px),linear-gradient(to_bottom,#0891b220_1px,transparent_1px)] bg-[size:40px_40px]`}>
       <div className="px-6 pt-4 flex-none">
         <Header 
-          groupBy={groupBy} 
-          setGroupBy={setGroupBy} 
           isDarkMode={isDarkMode} 
           toggleDarkMode={toggleDarkMode}
           onAdminOpen={() => setAdminOpen(true)}
