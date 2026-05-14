@@ -200,7 +200,7 @@ export function AdminPanel({ isOpen, onClose }) {
         setDataLoading(true);
         try {
             const [choreData, profileData] = await Promise.all([
-                adminRequest('/api/collections/chores/records?perPage=200&expand=round_robin_pool'),
+                adminRequest('/api/collections/chores/records?perPage=200'),
                 adminRequest('/api/collections/profiles/records?perPage=50'),
             ]);
             setChores(choreData.items || []);

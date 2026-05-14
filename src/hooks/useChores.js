@@ -59,7 +59,7 @@ export function useChores(groupBy) {
     const fetchData = useCallback(async () => {
         try {
             const [rawChoreList, profileList] = await Promise.all([
-                pb.collection('chores').getFullList({ sort: '-created', expand: 'round_robin_pool,assigned_to' }),
+                pb.collection('chores').getFullList({ sort: '-created' }),
                 pb.collection('profiles').getFullList()
             ]);
 
@@ -97,33 +97,29 @@ export function useChores(groupBy) {
             if (choresToReset.length > 0) {
                 await Promise.all(choresToReset.map(async (c, index) => {
                     let updateData = { is_completed: false };
-                    
-                    // Use round_robin_pool if it exists, otherwise fall back to all profiles
                     let pool = [];
-                    if (c.expand?.round_robin_pool) {
-                        // Relation field — use expanded profile names
-                        pool = c.expand.round_robin_pool.map(p => p.name);
-                    } else if (c.round_robin_pool) {
-                        // Legacy text field fallback
-                        if (typeof c.round_robin_pool === 'string') pool = c.round_robin_pool.split(',').map(n => n.trim());
+                    if (Array.isArray(c.round_robin_pool) && c.round_robin_pool.length > 0) {
+                        pool = c.round_robin_pool.map(val => {
+                            const profile = profileList.find(p => p.id === val || p.name === val);
+                            return profile ? profile.name : val;
+                        }).filter(Boolean);
+                    } else if (typeof c.round_robin_pool === 'string' && c.round_robin_pool.trim() !== '') {
+                        pool = c.round_robin_pool.split(',').map(val => {
+                            const profile = profileList.find(p => p.id === val.trim() || p.name === val.trim());
+                            return profile ? profile.name : val.trim();
+                        }).filter(Boolean);
                     } else {
                         pool = profileList.map(p => p.name);
                     }
                     
                     if (pool.length > 0) {
                         if (pool.length > 1) {
-                            // Find current assigned person's name
-                            const currentAssignedName = c.expand?.assigned_to?.name || c.assigned_to;
+                            const currentAssignedName = c.assigned_to;
                             const currentIdx = pool.indexOf(currentAssignedName);
                             const nextIdx = currentIdx === -1 ? 0 : (currentIdx + 1) % pool.length;
-                            const nextName = pool[nextIdx];
-                            
-                            // Find the profile ID for this name to save as relation
-                            const nextProfile = profileList.find(p => p.name === nextName);
-                            updateData.assigned_to = nextProfile ? nextProfile.id : nextName;
+                            updateData.assigned_to = pool[nextIdx];
                         } else if (pool.length === 1) {
-                            const p = profileList.find(p => p.name === pool[0]);
-                            updateData.assigned_to = p ? p.id : pool[0];
+                            updateData.assigned_to = pool[0];
                         }
                     }
 
@@ -138,15 +134,23 @@ export function useChores(groupBy) {
             if (unassignedChores.length > 0) {
                 await Promise.all(unassignedChores.map(async (c, index) => {
                     let pool = [];
-                    if (c.expand?.round_robin_pool) {
-                        pool = c.expand.round_robin_pool; // Array of profile objects
+                    if (Array.isArray(c.round_robin_pool) && c.round_robin_pool.length > 0) {
+                        pool = c.round_robin_pool.map(val => {
+                            const profile = profileList.find(p => p.id === val || p.name === val);
+                            return profile ? profile.name : val;
+                        }).filter(Boolean);
+                    } else if (typeof c.round_robin_pool === 'string' && c.round_robin_pool.trim() !== '') {
+                        pool = c.round_robin_pool.split(',').map(val => {
+                            const profile = profileList.find(p => p.id === val.trim() || p.name === val.trim());
+                            return profile ? profile.name : val.trim();
+                        }).filter(Boolean);
                     } else {
-                        pool = profileList; // Fallback to all profile objects
+                        pool = profileList.map(p => p.name);
                     }
                     
                     if (pool.length > 0) {
-                        const assignedProfile = pool[index % pool.length];
-                        return pb.collection('chores').update(c.id, { assigned_to: assignedProfile.id });
+                        const assignedName = pool[index % pool.length];
+                        return pb.collection('chores').update(c.id, { assigned_to: assignedName });
                     }
                 }));
                 fetchData(); 
@@ -247,8 +251,7 @@ export function useChores(groupBy) {
     // (Keep your groupedChores and sortedGroupEntries logic here)
     const groupedChores = chores.map(c => ({
         ...c,
-        // Ensure assigned_to display is the name, not the ID
-        assigned_to: c.expand?.assigned_to?.name || c.assigned_to
+        assigned_to: c.assigned_to
     })).reduce((acc, chore) => {
         const key = chore[groupBy] || 'Uncategorized';
         if (!acc[key]) acc[key] = [];
