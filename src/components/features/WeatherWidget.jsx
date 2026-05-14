@@ -56,7 +56,7 @@ export function WeatherWidget() {
 
     if (error || !weatherData) {
         return (
-            <div className="flex flex-col items-center justify-center gap-3 bg-white dark:bg-black p-4 border-2 border-red-500/50 w-full max-w-xs font-mono uppercase h-[140px]" style={{ clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%)' }}>
+            <div className="flex flex-col items-center justify-center gap-3 bg-white dark:bg-black p-4 border-2 border-red-500/50 w-full max-w-md font-mono uppercase h-[140px]" style={{ clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%)' }}>
                 <div className="text-red-500 text-xs tracking-widest">Sensor Error</div>
             </div>
         );
@@ -87,7 +87,7 @@ export function WeatherWidget() {
 
     return (
         <div
-            className="flex flex-col gap-3 bg-white dark:bg-black p-4 border-2 border-slate-300 dark:border-cyan-800 hover:border-cyan-400 dark:hover:border-cyan-400 shadow-sm hover:shadow-md dark:shadow-[0_0_15px_rgba(34,211,238,0.15)] dark:hover:shadow-[0_0_20px_rgba(34,211,238,0.4)] transition-all w-full max-w-xs font-mono uppercase"
+            className="flex flex-col gap-3 bg-white dark:bg-black p-4 border-2 border-slate-300 dark:border-cyan-800 hover:border-cyan-400 dark:hover:border-cyan-400 shadow-sm hover:shadow-md dark:shadow-[0_0_15px_rgba(34,211,238,0.15)] dark:hover:shadow-[0_0_20px_rgba(34,211,238,0.4)] transition-all w-full min-w-[450px] max-w-none font-mono uppercase"
             style={{ clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%)' }}
         >
             <div className="flex items-center justify-between gap-6 border-b border-slate-200 dark:border-cyan-900/50 pb-3">

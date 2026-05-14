@@ -12,9 +12,8 @@ This is a **React (Vite) + PocketBase** family dashboard PWA.
 |---|---|---|
 | Frontend | React + Vite + TailwindCSS | This repo (`/src`) |
 | Hosting | Vercel | `hub.hamiltonmarty.com` |
-| Database | PocketBase (self-hosted) | Raspberry Pi on home network |
-| DB Tunnel | Ngrok secure tunnel | `https://flogging-campsite-untying.ngrok-free.dev` |
-| DB Admin | PocketBase Admin UI | `https://flogging-campsite-untying.ngrok-free.dev/_/` |
+| Database | PocketBase (hosted) | https://hamilton-family-db.fly.dev |
+| DB Admin | PocketBase Admin UI | https://hamilton-family-db.fly.dev/_/ |
 
 ---
 
@@ -135,13 +134,8 @@ All collections have **open API rules** (no authentication required).
 
 ---
 
-## ⚠️ Known Issues & Important Notes
-
-### Ngrok SSE Blocks (Fixed by Polling)
-Ngrok blocks Server-Sent Events (SSE), which PocketBase uses for its realtime API. All `pb.collection().subscribe()` calls have been replaced with `setInterval(..., 30000)` (30-second polling). Do NOT add `.subscribe()` calls — they will always fail through Ngrok.
-
-### PocketBase `ngrok-skip-browser-warning` Header
-Added in `src/lib/pocketbase.js` via `pb.beforeSend`. Required for ALL requests to pass through Ngrok without hitting the interstitial page.
+### Realtime Subscriptions
+Realtime subscriptions (`pb.collection().subscribe()`) are fully functional as the app connects directly to the Fly.io instance.
 
 ### CORS
 PocketBase must have `https://hub.hamiltonmarty.com` in its **Settings → Application → CORS allowed origins**. Without this, all write operations fail.

@@ -9,6 +9,9 @@ import { MealPlanner } from './components/features/MealPlanner';
 import { PhotoAlbum } from './components/features/PhotoAlbum';
 import { AgentProfiles } from './components/features/AgentProfiles';
 import { AdminPanel } from './components/features/AdminPanel';
+import { GospelStudy } from './components/features/GospelStudy';
+import { FamilyBonus } from './components/features/FamilyBonus';
+import { SideQuest } from './components/features/SideQuest';
 import { RefreshCw } from 'lucide-react';
 import { Responsive, useContainerWidth } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
@@ -45,15 +48,22 @@ function App() {
   const { layouts, onLayoutChange } = useLayout();
   const { width, containerRef, mounted } = useContainerWidth();
 
+  const children = profiles.filter(p => !p.is_parent);
+  const allChildrenMetGoal = children.length > 0 && children.every(c => (c.xp_balance || 0) >= 100);
+
   return (
-    <div className="h-screen w-screen overflow-hidden flex flex-col bg-slate-50 dark:bg-black text-slate-900 dark:text-white p-4 font-mono tracking-tight bg-[linear-gradient(to_right,#0891b220_1px,transparent_1px),linear-gradient(to_bottom,#0891b220_1px,transparent_1px)] bg-[size:40px_40px]">
-      <Header 
-        groupBy={groupBy} 
-        setGroupBy={setGroupBy} 
-        isDarkMode={isDarkMode} 
-        toggleDarkMode={toggleDarkMode}
-        onAdminOpen={() => setAdminOpen(true)}
-      />
+    <div className={`h-screen w-screen overflow-hidden flex flex-col bg-slate-50 dark:bg-black text-slate-900 dark:text-white font-mono tracking-tight transition-all duration-1000 ${
+      allChildrenMetGoal ? 'ring-8 ring-amber-400/50 shadow-[inset_0_0_100px_rgba(245,158,11,0.2)]' : ''
+    } bg-[linear-gradient(to_right,#0891b220_1px,transparent_1px),linear-gradient(to_bottom,#0891b220_1px,transparent_1px)] bg-[size:40px_40px]`}>
+      <div className="px-6 pt-4 flex-none">
+        <Header 
+          groupBy={groupBy} 
+          setGroupBy={setGroupBy} 
+          isDarkMode={isDarkMode} 
+          toggleDarkMode={toggleDarkMode}
+          onAdminOpen={() => setAdminOpen(true)}
+        />
+      </div>
       <AdminPanel isOpen={adminOpen} onClose={() => setAdminOpen(false)} />
 
       {todayHoliday && (
@@ -74,7 +84,7 @@ function App() {
           <p className="text-slate-500 font-black uppercase tracking-widest animate-pulse">Syncing Database...</p>
         </div>
       ) : (
-        <div className="flex-1 w-full overflow-y-auto overflow-x-hidden min-h-0 relative custom-scrollbar" ref={containerRef}>
+        <div className="flex-1 w-full px-6 overflow-y-auto overflow-x-hidden min-h-0 relative custom-scrollbar pb-96" ref={containerRef}>
           {mounted && (
             <Responsive
               className="layout"
@@ -82,10 +92,12 @@ function App() {
               breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
               cols={{ lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }}
               rowHeight={350}
-              width={width}
+              width={width - 48} // Subtracting the px-6 (24px * 2) to prevent horizontal scroll
               onLayoutChange={onLayoutChange}
               draggableHandle=".drag-handle"
-              margin={[24, 24]}
+              margin={[16, 16]}
+              containerPadding={[0, 16]}
+              useCSSTransforms={true}
             >
             <div key="agents" className="flex flex-col h-full bg-white dark:bg-black border-2 border-slate-300 dark:border-cyan-900 shadow-lg">
               <AgentProfiles
@@ -109,6 +121,18 @@ function App() {
               <CalendarView profiles={profiles} />
             </div>
 
+            <div key="gospel" className="flex flex-col h-full">
+              <GospelStudy />
+            </div>
+
+            <div key="bonus" className="flex flex-col h-full">
+              <FamilyBonus profiles={profiles} />
+            </div>
+
+            <div key="quest" className="flex flex-col h-full">
+              <SideQuest profiles={profiles} />
+            </div>
+
             <div key="meals" className="flex flex-col h-full bg-white dark:bg-black border-2 border-slate-300 dark:border-cyan-900 shadow-lg">
               <MealPlanner />
             </div>
@@ -126,7 +150,7 @@ function App() {
       )}
 
       {!loading && (
-        <footer className="mt-4 pt-4 border-t border-slate-800/50 flex justify-between items-center text-slate-600 font-bold uppercase text-[10px] tracking-[0.3em] flex-none">
+        <footer className="mt-4 pt-4 px-6 pb-4 border-t border-slate-800/50 flex justify-between items-center text-slate-600 font-bold uppercase text-[10px] tracking-[0.3em] flex-none">
           <div>System: FamilyHub v1.5 // Active</div>
           <div className="flex gap-8">
             <span>Completed: {chores.filter(c => c.is_completed).length}</span>

@@ -31,9 +31,6 @@ export function ChoreGrid({ sortedGroupEntries, profiles, groupBy, toggleChore, 
                 return (
                     <section key={groupName} className="animate-in fade-in slide-in-from-bottom-4 duration-700">
 
-                        {/* GAMIFICATION: Only shows when viewing by Person */}
-                        {profile && <RewardBar profile={profile} goalXP={1000} />}
-
                         {/* CATEGORY HEADER */}
                         <div className="flex items-center gap-6 mb-8 font-mono">
                             <h2 className="text-4xl font-black uppercase tracking-widest text-cyan-600 dark:text-cyan-400 drop-shadow-sm dark:drop-shadow-[0_0_10px_rgba(34,211,238,0.6)]">

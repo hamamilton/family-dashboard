@@ -56,11 +56,7 @@ body {
 }
 
 #root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
+  width: 100%;
   min-height: 100svh;
   display: flex;
   flex-direction: column;
@@ -179,4 +175,18 @@ code {
   border-color: #f0abfc; /* fuchsia-400 */
   width: 14px;
   height: 14px;
+}
+
+/* Ensure the grid can expand and doesn't clip dragging items */
+.react-grid-layout {
+  min-height: 100%;
+  transition: height 200ms ease;
+}
+
+.react-grid-placeholder {
+  background: rgba(34, 211, 238, 0.1) !important;
+  border: 2px dashed #22d3ee !important;
+  border-radius: 8px !important;
+  opacity: 0.5 !important;
+  z-index: 2 !important;
 }

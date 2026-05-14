@@ -106,7 +106,7 @@ export function AgentProfiles({ profiles = [], chores = [], birthdayProfiles = [
             </div>
 
             <div className="flex flex-row gap-4 flex-1 overflow-x-auto pb-2">
-                {profiles.map((profile, idx) => (
+                {profiles.filter(p => !p.is_parent).map((profile, idx) => (
                     <AgentCard
                         key={profile.id}
                         profile={profile}

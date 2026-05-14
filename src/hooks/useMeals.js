@@ -26,6 +26,7 @@ const loadLocalMeals = () => {
 
 export function useMeals() {
     const [meals, setMeals] = useState(loadLocalMeals());
+    const [cookedHistory, setCookedHistory] = useState([]);
     const [loading, setLoading] = useState(false);
 
     const fetchMeals = useCallback(async () => {
@@ -47,16 +48,32 @@ export function useMeals() {
             localStorage.setItem('family_dashboard_meals', JSON.stringify(fullMealsList));
         } catch (err) {
             console.warn("Could not fetch meals from Pocketbase. Falling back to local data.", err);
-        } finally {
-            setLoading(false);
+        }
+    }, []);
+
+    const fetchHistory = useCallback(async () => {
+        try {
+            const records = await pb.collection('cooked_meals').getFullList({
+                sort: '-created',
+            });
+            setCookedHistory(records);
+        } catch (err) {
+            console.warn("Could not fetch cooked_meals from Pocketbase.");
         }
     }, []);
 
     useEffect(() => {
-        fetchMeals();
+        setLoading(true);
+        Promise.all([fetchMeals(), fetchHistory()]).finally(() => setLoading(false));
+
         pb.collection('meals').subscribe('*', fetchMeals);
-        return () => pb.collection('meals').unsubscribe();
-    }, [fetchMeals]);
+        pb.collection('cooked_meals').subscribe('*', fetchHistory);
+
+        return () => {
+            pb.collection('meals').unsubscribe();
+            pb.collection('cooked_meals').unsubscribe();
+        };
+    }, [fetchMeals, fetchHistory]);
 
     const updateMeal = async (day, field, value) => {
         const existingMeal = meals.find(m => m.day === day);
@@ -87,6 +104,28 @@ export function useMeals() {
         }
     };
 
+    const addToHistory = async (meal) => {
+        if (!meal.main_dish) return;
+        try {
+            // Check if it already exists to avoid duplicates
+            const existing = cookedHistory.find(h => h.main_dish.toLowerCase() === meal.main_dish.toLowerCase());
+            if (existing) {
+                await pb.collection('cooked_meals').update(existing.id, {
+                    last_cooked: new Date().toISOString()
+                });
+            } else {
+                await pb.collection('cooked_meals').create({
+                    main_dish: meal.main_dish,
+                    side_dish: meal.side_dish || '',
+                    last_cooked: new Date().toISOString()
+                });
+            }
+            fetchHistory();
+        } catch (err) {
+            console.warn("Could not save to cooked_meals history.", err);
+        }
+    };
+
     const clearMeals = async () => {
         const resetMeals = meals.map(m => ({ ...m, main_dish: '', side_dish: '' }));
         
@@ -105,5 +144,11 @@ export function useMeals() {
         }
     };
 
-    return { meals, loading, updateMeal, clearMeals };
+    const getRandomInspiration = () => {
+        if (cookedHistory.length === 0) return null;
+        const randomIndex = Math.floor(Math.random() * cookedHistory.length);
+        return cookedHistory[randomIndex];
+    };
+
+    return { meals, cookedHistory, loading, updateMeal, clearMeals, addToHistory, getRandomInspiration };
 }
