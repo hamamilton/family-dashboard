@@ -1,4 +1,4 @@
-import { User, Calendar as CalendarIcon, Repeat, Sun, Moon, Shield } from 'lucide-react';
+import { User, Calendar as CalendarIcon, Repeat, Sun, Moon, Shield, Maximize } from 'lucide-react';
 import { WeatherWidget } from '../features/WeatherWidget';
 
 export function Header({ groupBy, setGroupBy, isDarkMode, toggleDarkMode, onAdminOpen }) {
@@ -7,6 +7,18 @@ export function Header({ groupBy, setGroupBy, isDarkMode, toggleDarkMode, onAdmi
         { id: 'day_due', label: 'By Day', icon: <CalendarIcon size={18} /> },
         { id: 'frequency', label: 'Frequency', icon: <Repeat size={18} /> }
     ];
+
+    const toggleFullscreen = () => {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(err => {
+                console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+            });
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            }
+        }
+    };
 
     return (
         <header className="mb-6 flex flex-col xl:flex-row justify-between items-start gap-6 font-mono uppercase flex-none">
@@ -22,6 +34,15 @@ export function Header({ groupBy, setGroupBy, isDarkMode, toggleDarkMode, onAdmi
                 </div>
 
                 <div className="hidden lg:flex gap-2 items-center">
+                    <button
+                        onClick={toggleFullscreen}
+                        className="p-3 bg-white dark:bg-black border-2 border-slate-300 dark:border-emerald-800 text-slate-500 dark:text-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-300 hover:border-emerald-400 transition-all shadow-sm dark:shadow-[0_0_15px_rgba(16,185,129,0.15)]"
+                        style={{ clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%)' }}
+                        aria-label="Kiosk Mode"
+                        title="Kiosk Mode"
+                    >
+                        <Maximize size={20} />
+                    </button>
                     <button
                         onClick={toggleDarkMode}
                         className="p-3 bg-white dark:bg-black border-2 border-slate-300 dark:border-cyan-800 text-slate-500 dark:text-cyan-400 hover:text-cyan-600 dark:hover:text-cyan-300 hover:border-cyan-400 transition-all shadow-sm dark:shadow-[0_0_15px_rgba(34,211,238,0.15)]"
@@ -60,6 +81,14 @@ export function Header({ groupBy, setGroupBy, isDarkMode, toggleDarkMode, onAdmi
             </div>
 
             <div className="flex md:hidden w-full mt-2 gap-4">
+                <button
+                    onClick={toggleFullscreen}
+                    className="p-3 bg-white dark:bg-black border-2 border-slate-300 dark:border-emerald-800 text-slate-500 dark:text-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-300 hover:border-emerald-400 transition-all"
+                    style={{ clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%)' }}
+                    aria-label="Kiosk Mode"
+                >
+                    <Maximize size={20} />
+                </button>
                 <button
                     onClick={toggleDarkMode}
                     className="p-3 bg-white dark:bg-black border-2 border-slate-300 dark:border-cyan-800 text-slate-500 dark:text-cyan-400 hover:text-cyan-600 dark:hover:text-cyan-300 hover:border-cyan-400 transition-all"
