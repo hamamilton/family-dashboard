@@ -55,7 +55,8 @@ All collections have **open API rules** (no authentication required).
 | Field | Type | Notes |
 |---|---|---|
 | `title` | Text | Event display name |
-| `date` | Text | ISO datetime string (e.g. `2026-05-12T18:00:00.000Z`) |
+| `date` | Text | Start ISO datetime string |
+| `end` | Text | End ISO datetime string |
 | `assignee` | Text | Person this event belongs to |
 | `color` | Text | Optional color override |
 

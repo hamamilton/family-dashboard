@@ -27,7 +27,6 @@ export function useCalendar() {
             const records = await pb.collection('events').getFullList({ sort: 'date' });
             
             const formattedRecords = records.map(record => {
-                // Support both 'date' field (what we create) and legacy 'start'/'end' fields
                 const startDate = new Date(record.date || record.start);
                 const endDate = record.end 
                     ? new Date(record.end) 
@@ -35,12 +34,11 @@ export function useCalendar() {
 
                 return {
                     ...record,
-                    // Map 'assignee' field back to 'assigned_to' for the EventComponent
                     assigned_to: record.assignee || record.assigned_to || 'Everyone',
                     start: startDate,
                     end: endDate,
                 };
-            }).filter(e => !isNaN(e.start.getTime())); // Remove any records with invalid dates
+            }).filter(e => !isNaN(e.start.getTime()) && !isNaN(e.end.getTime()));
             
             console.log(`Fetched ${formattedRecords.length} calendar events from PocketBase`);
             setEvents(formattedRecords);
@@ -71,10 +69,10 @@ export function useCalendar() {
             await pb.collection('events').create({
                 title: newEvent.title,
                 date: newEvent.start.toISOString(),
+                end: newEvent.end.toISOString(),
                 assignee: newEvent.assigned_to,
                 color: newEvent.color || '',
             });
-            // Refetch to get real record with server ID
             await fetchEvents();
         } catch (err) {
             console.warn("Could not save to Pocketbase. Event exists only locally.", err);
@@ -113,9 +111,11 @@ export function useCalendar() {
         if (!id.startsWith('temp-') && !id.startsWith('mock-')) {
             try {
                 await pb.collection('events').update(id, {
-                    ...updatedData,
-                    start: new Date(updatedData.start).toISOString(),
-                    end: new Date(updatedData.end).toISOString()
+                    title: updatedData.title,
+                    date: new Date(updatedData.start).toISOString(),
+                    end: new Date(updatedData.end).toISOString(),
+                    assignee: updatedData.assigned_to,
+                    color: updatedData.color || ''
                 });
             } catch (err) {
                 console.warn("Could not update in Pocketbase.", err);

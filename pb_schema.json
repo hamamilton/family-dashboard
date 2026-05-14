@@ -63,6 +63,7 @@
     "fields": [
       { "name": "title", "type": "text", "required": true, "options": { "min": null, "max": null, "pattern": "" } },
       { "name": "date", "type": "text", "required": false, "options": { "min": null, "max": null, "pattern": "" } },
+      { "name": "end", "type": "text", "required": false, "options": { "min": null, "max": null, "pattern": "" } },
       { "name": "assignee", "type": "text", "required": false, "options": { "min": null, "max": null, "pattern": "" } },
       { "name": "color", "type": "text", "required": false, "options": { "min": null, "max": null, "pattern": "" } }
     ],
