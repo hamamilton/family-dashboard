@@ -262,9 +262,12 @@ export function useChores(groupBy) {
             day_due = 'One-off Tasks';
         }
 
+        const assignedProfile = profiles.find(p => p.id === c.assigned_to || p.name === c.assigned_to);
+        const resolvedName = assignedProfile ? assignedProfile.name : c.assigned_to;
+
         return {
             ...c,
-            assigned_to: c.assigned_to,
+            assigned_to: resolvedName,
             day_due: day_due
         };
     }).reduce((acc, chore) => {
