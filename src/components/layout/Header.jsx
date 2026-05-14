@@ -2,15 +2,39 @@ import { User, Calendar as CalendarIcon, Repeat, Sun, Moon, Shield, Maximize } f
 import { WeatherWidget } from '../features/WeatherWidget';
 
 export function Header({ isDarkMode, toggleDarkMode, onAdminOpen }) {
-    const toggleFullscreen = () => {
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(err => {
-                console.error(`Error attempting to enable full-screen mode: ${err.message}`);
-            });
-        } else {
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
+    const toggleFullscreen = async () => {
+        try {
+            const elem = document.documentElement;
+            const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+            
+            if (!isFullscreen) {
+                if (elem.requestFullscreen) {
+                    const p = elem.requestFullscreen();
+                    if (p) await p;
+                } else if (elem.webkitRequestFullscreen) {
+                    const p = elem.webkitRequestFullscreen();
+                    if (p) await p;
+                } else if (elem.msRequestFullscreen) {
+                    const p = elem.msRequestFullscreen();
+                    if (p) await p;
+                } else {
+                    alert("Fullscreen API is not supported on this device/browser.");
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    const p = document.exitFullscreen();
+                    if (p) await p;
+                } else if (document.webkitExitFullscreen) {
+                    const p = document.webkitExitFullscreen();
+                    if (p) await p;
+                } else if (document.msExitFullscreen) {
+                    const p = document.msExitFullscreen();
+                    if (p) await p;
+                }
             }
+        } catch (err) {
+            console.error(err);
+            alert("Fullscreen error: " + err.message);
         }
     };
 

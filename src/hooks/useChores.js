@@ -249,35 +249,94 @@ export function useChores(groupBy) {
     }, [fetchData]);
 
     // (Keep your groupedChores and sortedGroupEntries logic here)
-    const groupedChores = chores.map(c => {
-        let day_due = 'Uncategorized';
-        if (c.frequency === 'daily') day_due = 'Daily';
-        else if (c.frequency === 'weekly') {
-            if (Array.isArray(c.due_dates) && c.due_dates.length > 0) day_due = c.due_dates.join(', ');
-            else if (typeof c.due_dates === 'string' && c.due_dates) day_due = c.due_dates;
-            else day_due = 'Weekly';
-        } else if (c.frequency === 'monthly') {
-            day_due = 'Monthly';
-        } else if (c.frequency === 'none' || !c.frequency) {
-            day_due = 'One-off Tasks';
-        }
-
+    const expandedChores = chores.flatMap(c => {
         const assignedProfile = profiles.find(p => p.id === c.assigned_to || p.name === c.assigned_to);
         const resolvedName = assignedProfile ? assignedProfile.name : c.assigned_to;
 
-        return {
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const todayIdx = new Date().getDay();
+
+        if (c.frequency === 'daily' || c.frequency === 'weekly') {
+            let pool = [];
+            if (Array.isArray(c.round_robin_pool) && c.round_robin_pool.length > 0) {
+                pool = c.round_robin_pool.map(val => {
+                    const p = profiles.find(p => p.id === val || p.name === val);
+                    return p ? p.name : val;
+                }).filter(Boolean);
+            } else if (typeof c.round_robin_pool === 'string' && c.round_robin_pool.trim() !== '') {
+                pool = c.round_robin_pool.split(',').map(val => {
+                    const p = profiles.find(p => p.id === val.trim() || p.name === val.trim());
+                    return p ? p.name : val.trim();
+                }).filter(Boolean);
+            } else {
+                pool = profiles.map(p => p.name);
+            }
+
+            const currentIdx = pool.indexOf(resolvedName) === -1 ? 0 : pool.indexOf(resolvedName);
+            const projected = [];
+            let dueDays = [];
+
+            if (c.frequency === 'weekly') {
+                if (Array.isArray(c.due_dates)) dueDays = c.due_dates.map(d => String(d).trim());
+                else if (typeof c.due_dates === 'string') dueDays = c.due_dates.split(',').map(d => d.trim());
+            }
+
+            let assignmentCounter = 0;
+
+            for (let i = 0; i < 7; i++) {
+                const targetDayIdx = (todayIdx + i) % 7;
+                const targetDayName = days[targetDayIdx];
+                
+                if (c.frequency === 'weekly' && !dueDays.includes(targetDayName)) {
+                    continue;
+                }
+
+                const projectedName = pool.length > 0 
+                    ? pool[(currentIdx + assignmentCounter) % pool.length] 
+                    : resolvedName;
+                
+                const displayDay = i === 0 ? `Today (${targetDayName})` : targetDayName;
+
+                projected.push({
+                    ...c,
+                    id: i === 0 ? c.id : `${c.id}_future_${i}`,
+                    assigned_to: projectedName,
+                    day_due: displayDay,
+                    is_completed: i === 0 ? c.is_completed : false,
+                    is_future: i > 0,
+                    sort_order: i
+                });
+
+                assignmentCounter++;
+            }
+            
+            if (projected.length > 0) return projected;
+        }
+
+        let day_due = 'Uncategorized';
+        if (c.frequency === 'monthly') day_due = 'Monthly';
+        else if (c.frequency === 'none' || !c.frequency) day_due = 'One-off Tasks';
+
+        return [{
             ...c,
             assigned_to: resolvedName,
-            day_due: day_due
-        };
-    }).reduce((acc, chore) => {
+            day_due: day_due,
+            sort_order: 99
+        }];
+    });
+
+    const groupedChores = expandedChores.reduce((acc, chore) => {
         const key = chore[groupBy] || 'Uncategorized';
         if (!acc[key]) acc[key] = [];
         acc[key].push(chore);
         return acc;
     }, {});
 
-    const sortedGroupEntries = Object.entries(groupedChores);
+    const sortedGroupEntries = Object.entries(groupedChores).sort((a, b) => {
+        const orderA = a[1][0]?.sort_order ?? 99;
+        const orderB = b[1][0]?.sort_order ?? 99;
+        return orderA - orderB;
+    });
 
     return { chores, profiles, sortedGroupEntries, loading, toggleChore, todayHoliday, birthdayProfiles };
 }

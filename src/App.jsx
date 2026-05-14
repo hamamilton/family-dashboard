@@ -13,8 +13,7 @@ import { GospelStudy } from './components/features/GospelStudy';
 import { FamilyBonus } from './components/features/FamilyBonus';
 import { SideQuest } from './components/features/SideQuest';
 import { RefreshCw } from 'lucide-react';
-import { Responsive, WidthProvider } from 'react-grid-layout';
-const ResponsiveGridLayout = WidthProvider(Responsive);
+import { Responsive } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 
@@ -47,9 +46,14 @@ function App() {
 
   const { sortedGroupEntries, loading, toggleChore, chores, profiles, todayHoliday, birthdayProfiles } = useChores(groupBy);
   const { layouts, onLayoutChange } = useLayout();
+  const [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
   const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
     setMounted(true);
+    const handleResize = () => setWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   const children = profiles.filter(p => !p.is_parent);
@@ -88,18 +92,18 @@ function App() {
       ) : (
         <div className="flex-1 w-full px-6 overflow-y-auto overflow-x-hidden min-h-0 relative custom-scrollbar pb-96">
           {mounted && (
-            <ResponsiveGridLayout
+            <Responsive
               className="layout"
               layouts={layouts}
-              breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
-              cols={{ lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }}
+              breakpoints={{ xxl: 2560, xl: 1600, lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
+              cols={{ xxl: 24, xl: 16, lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }}
               rowHeight={350}
+              width={width - 48} // Subtracting the px-6 (24px * 2) to prevent horizontal scroll
               onLayoutChange={onLayoutChange}
               draggableHandle=".drag-handle"
               margin={[16, 16]}
               containerPadding={[0, 16]}
               useCSSTransforms={true}
-              measureBeforeMount={false}
             >
             <div key="agents" className="flex flex-col h-full bg-white dark:bg-black border-2 border-slate-300 dark:border-cyan-900 shadow-lg">
               <AgentProfiles
@@ -146,7 +150,7 @@ function App() {
             <div key="photos" className="flex flex-col h-full bg-white dark:bg-black border-2 border-slate-300 dark:border-cyan-900 shadow-lg">
               <PhotoAlbum />
             </div>
-            </ResponsiveGridLayout>
+            </Responsive>
           )}
         </div>
       )}

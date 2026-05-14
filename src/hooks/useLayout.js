@@ -1,6 +1,28 @@
 import { useState, useEffect } from 'react';
 
 const DEFAULT_LAYOUT = {
+    xxl: [
+        { i: 'agents', x: 0, y: 0, w: 24, h: 1 },
+        { i: 'chores', x: 0, y: 1, w: 16, h: 1 },
+        { i: 'calendar', x: 16, y: 1, w: 8, h: 2 },
+        { i: 'gospel', x: 0, y: 2, w: 8, h: 1 },
+        { i: 'bonus', x: 8, y: 2, w: 8, h: 1 },
+        { i: 'quest', x: 16, y: 2, w: 8, h: 1 },
+        { i: 'meals', x: 0, y: 3, w: 8, h: 1 },
+        { i: 'groceries', x: 8, y: 3, w: 8, h: 1 },
+        { i: 'photos', x: 16, y: 3, w: 8, h: 2 },
+    ],
+    xl: [
+        { i: 'agents', x: 0, y: 0, w: 16, h: 1 },
+        { i: 'chores', x: 0, y: 1, w: 10, h: 1 },
+        { i: 'calendar', x: 10, y: 1, w: 6, h: 2 },
+        { i: 'gospel', x: 0, y: 2, w: 5, h: 1 },
+        { i: 'bonus', x: 5, y: 2, w: 5, h: 1 },
+        { i: 'quest', x: 10, y: 2, w: 6, h: 1 },
+        { i: 'meals', x: 0, y: 3, w: 5, h: 1 },
+        { i: 'groceries', x: 5, y: 3, w: 5, h: 1 },
+        { i: 'photos', x: 10, y: 3, w: 6, h: 2 },
+    ],
     lg: [
         { i: 'agents', x: 0, y: 0, w: 12, h: 1 },
         { i: 'chores', x: 0, y: 1, w: 8, h: 1 },
@@ -41,6 +63,9 @@ const loadLocalLayout = () => {
     if (localData) {
         try {
             const parsed = JSON.parse(localData);
+            if (!parsed.xl) parsed.xl = DEFAULT_LAYOUT.xl;
+            if (!parsed.xxl) parsed.xxl = DEFAULT_LAYOUT.xxl;
+
             // Upgrade: add 'agents' if missing from saved layout
             if (!parsed.lg.find(item => item.i === 'agents')) {
                 parsed.lg.unshift({ i: 'agents', x: 0, y: 0, w: 12, h: 1 });
