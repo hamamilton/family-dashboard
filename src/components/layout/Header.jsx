@@ -1,10 +1,10 @@
-import { User, Calendar as CalendarIcon, Repeat, Sun, Moon, Shield, Maximize } from 'lucide-react';
+import { User, Calendar as CalendarIcon, Repeat, Sun, Moon, Shield, Maximize, Lock, Unlock } from 'lucide-react';
 import { WeatherWidget } from '../features/WeatherWidget';
 import { SideQuest } from '../features/SideQuest';
 import { AgentProfiles } from '../features/AgentProfiles';
 import { FamilyBonus } from '../features/FamilyBonus';
 
-export function Header({ isDarkMode, toggleDarkMode, onAdminOpen, profiles, chores, birthdayProfiles }) {
+export function Header({ isDarkMode, toggleDarkMode, onAdminOpen, profiles, chores, birthdayProfiles, isLayoutLocked, toggleLayoutLock }) {
     const toggleFullscreen = async () => {
         try {
             const elem = document.documentElement;
@@ -57,6 +57,19 @@ export function Header({ isDarkMode, toggleDarkMode, onAdminOpen, profiles, chor
 
                 <div className="hidden lg:flex gap-2 items-center">
                     <button
+                        onClick={toggleLayoutLock}
+                        className={`p-3 bg-white dark:bg-black border-2 transition-all shadow-sm ${
+                            isLayoutLocked 
+                            ? 'border-slate-300 dark:border-slate-800 text-slate-400 dark:text-slate-600' 
+                            : 'border-amber-500/50 dark:border-amber-900 text-amber-600 dark:text-amber-500 hover:border-amber-400'
+                        }`}
+                        style={{ clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 12px)' }}
+                        aria-label={isLayoutLocked ? "Unlock Layout" : "Lock Layout"}
+                        title={isLayoutLocked ? "Unlock Layout" : "Lock Layout"}
+                    >
+                        {isLayoutLocked ? <Lock size={20} /> : <Unlock size={20} />}
+                    </button>
+                    <button
                         onClick={toggleFullscreen}
                         className="p-3 bg-white dark:bg-black border-2 border-slate-300 dark:border-emerald-800 text-slate-500 dark:text-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-300 hover:border-emerald-400 transition-all shadow-sm dark:shadow-[0_0_15px_rgba(16,185,129,0.15)]"
                         style={{ clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 12px)' }}
@@ -107,6 +120,18 @@ export function Header({ isDarkMode, toggleDarkMode, onAdminOpen, profiles, chor
             </div>
 
             <div className="flex md:hidden w-full mt-2 gap-4">
+                <button
+                    onClick={toggleLayoutLock}
+                    className={`p-3 bg-white dark:bg-black border-2 transition-all ${
+                        isLayoutLocked 
+                        ? 'border-slate-300 dark:border-slate-800 text-slate-400 dark:text-slate-600' 
+                        : 'border-amber-500/50 dark:border-amber-900 text-amber-600 dark:text-amber-500 hover:border-amber-400'
+                    }`}
+                    style={{ clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%)' }}
+                    aria-label={isLayoutLocked ? "Unlock Layout" : "Lock Layout"}
+                >
+                    {isLayoutLocked ? <Lock size={20} /> : <Unlock size={20} />}
+                </button>
                 <button
                     onClick={toggleFullscreen}
                     className="p-3 bg-white dark:bg-black border-2 border-slate-300 dark:border-emerald-800 text-slate-500 dark:text-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-300 hover:border-emerald-400 transition-all"

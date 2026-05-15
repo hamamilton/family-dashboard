@@ -12,7 +12,7 @@ import { AdminPanel } from './components/features/AdminPanel';
 import { GospelStudy } from './components/features/GospelStudy';
 import { FamilyBonus } from './components/features/FamilyBonus';
 import { SideQuest } from './components/features/SideQuest';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Lock, Unlock } from 'lucide-react';
 import { Responsive } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -43,6 +43,18 @@ function App() {
 
   const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [isLayoutLocked, setIsLayoutLocked] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('layout_locked') === 'true';
+    }
+    return false;
+  });
+
+  const toggleLayoutLock = () => {
+    const newState = !isLayoutLocked;
+    setIsLayoutLocked(newState);
+    localStorage.setItem('layout_locked', String(newState));
+  };
 
   const { sortedGroupEntries, loading, toggleChore, reassignChore, addChore, chores, profiles, todayHoliday, birthdayProfiles } = useChores(groupBy);
   const { layouts, onLayoutChange } = useLayout();
@@ -71,6 +83,8 @@ function App() {
           profiles={profiles}
           chores={chores}
           birthdayProfiles={birthdayProfiles}
+          isLayoutLocked={isLayoutLocked}
+          toggleLayoutLock={toggleLayoutLock}
         />
       </div>
       <AdminPanel isOpen={adminOpen} onClose={() => setAdminOpen(false)} />
@@ -104,6 +118,8 @@ function App() {
               width={width - 48} // Subtracting the px-6 (24px * 2) to prevent horizontal scroll
               onLayoutChange={onLayoutChange}
               draggableHandle=".drag-handle"
+              isDraggable={!isLayoutLocked}
+              isResizable={!isLayoutLocked}
               margin={[16, 16]}
               containerPadding={[0, 16]}
               useCSSTransforms={true}
