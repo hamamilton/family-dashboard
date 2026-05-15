@@ -69,6 +69,8 @@ function App() {
           toggleDarkMode={toggleDarkMode}
           onAdminOpen={() => setAdminOpen(true)}
           profiles={profiles}
+          chores={chores}
+          birthdayProfiles={birthdayProfiles}
         />
       </div>
       <AdminPanel isOpen={adminOpen} onClose={() => setAdminOpen(false)} />
@@ -106,13 +108,6 @@ function App() {
               containerPadding={[0, 16]}
               useCSSTransforms={true}
             >
-            <div key="agents" className="flex flex-col h-full bg-white dark:bg-black border-2 border-slate-300 dark:border-cyan-900 shadow-lg">
-              <AgentProfiles
-                profiles={profiles}
-                chores={chores}
-                birthdayProfiles={birthdayProfiles}
-              />
-            </div>
 
             <div key="chores" className="flex flex-col h-full bg-white dark:bg-black border-2 border-slate-300 dark:border-cyan-900 shadow-lg">
               <ChoreGrid
@@ -134,9 +129,6 @@ function App() {
               <GospelStudy />
             </div>
 
-            <div key="bonus" className="flex flex-col h-full">
-              <FamilyBonus profiles={profiles} />
-            </div>
 
 
 

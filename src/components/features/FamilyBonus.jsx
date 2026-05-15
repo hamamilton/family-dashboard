@@ -1,6 +1,6 @@
 import { Gift, Star, Trophy, PartyPopper } from 'lucide-react';
 
-export function FamilyBonus({ profiles = [] }) {
+export function FamilyBonus({ profiles = [], compact = false }) {
     const children = profiles.filter(p => !p.is_parent);
     const goalPerChild = 100;
     
@@ -15,6 +15,50 @@ export function FamilyBonus({ profiles = [] }) {
     const allMet = childrenStatus.every(c => c.met);
     const totalMet = childrenStatus.filter(c => c.met).length;
     
+    if (compact) {
+        return (
+            <div className={`flex items-center gap-4 border-2 ${compact ? 'p-2' : 'p-4'} font-mono transition-all duration-700 ${
+                allMet 
+                ? 'bg-gradient-to-r from-amber-400 to-amber-500 border-white shadow-[0_0_15px_rgba(245,158,11,0.4)]' 
+                : 'bg-white dark:bg-black border-slate-300 dark:border-fuchsia-900 shadow-sm'
+            }`}>
+                <div className={`p-1.5 border-2 flex-none ${allMet ? 'border-white text-white' : 'border-fuchsia-500 text-fuchsia-500'}`}>
+                    {allMet ? <Trophy size={16} /> : <Gift size={16} />}
+                </div>
+                
+                <div className="flex-1 min-w-[120px]">
+                    <div className="flex justify-between items-end mb-1">
+                        <span className={`text-[9px] font-black uppercase tracking-widest ${allMet ? 'text-white' : 'text-slate-800 dark:text-white'}`}>
+                            {allMet ? 'MISSION ACCOMPLISHED' : 'Family Bonus'}
+                        </span>
+                        <span className={`text-[8px] font-bold ${allMet ? 'text-amber-900' : 'text-fuchsia-500'}`}>
+                            {totalMet}/{childrenStatus.length} Agents
+                        </span>
+                    </div>
+                    <div className="h-2 w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-0.5">
+                        <div 
+                            className="h-full bg-gradient-to-r from-fuchsia-600 to-cyan-500 transition-all duration-1000"
+                            style={{ width: `${(totalMet / childrenStatus.length) * 100}%` }}
+                        />
+                    </div>
+                </div>
+
+                {!allMet && (
+                    <div className="hidden md:flex gap-1">
+                        {childrenStatus.map(child => (
+                            <div key={child.name} className="w-1.5 h-4 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 relative overflow-hidden" title={`${child.name}: ${child.xp} XP`}>
+                                <div 
+                                    className={`absolute bottom-0 left-0 right-0 transition-all duration-1000 ${child.met ? 'bg-emerald-500' : 'bg-fuchsia-500'}`}
+                                    style={{ height: `${Math.min((child.xp / goalPerChild) * 100, 100)}%` }}
+                                />
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        );
+    }
+
     return (
         <div className={`flex flex-col h-full border-2 p-6 font-mono transition-all duration-700 ${
             allMet 

@@ -1,8 +1,10 @@
 import { User, Calendar as CalendarIcon, Repeat, Sun, Moon, Shield, Maximize } from 'lucide-react';
 import { WeatherWidget } from '../features/WeatherWidget';
 import { SideQuest } from '../features/SideQuest';
+import { AgentProfiles } from '../features/AgentProfiles';
+import { FamilyBonus } from '../features/FamilyBonus';
 
-export function Header({ isDarkMode, toggleDarkMode, onAdminOpen, profiles }) {
+export function Header({ isDarkMode, toggleDarkMode, onAdminOpen, profiles, chores, birthdayProfiles }) {
     const toggleFullscreen = async () => {
         try {
             const elem = document.documentElement;
@@ -40,7 +42,8 @@ export function Header({ isDarkMode, toggleDarkMode, onAdminOpen, profiles }) {
     };
 
     return (
-        <header className="mb-6 flex flex-col xl:flex-row justify-between items-start gap-6 font-mono uppercase flex-none">
+        <header className="mb-6 flex flex-col gap-6 font-mono uppercase flex-none">
+            <div className="flex flex-col xl:flex-row justify-between items-start gap-6">
 
             <div className="flex flex-col md:flex-row gap-6 items-start md:items-center w-full xl:w-auto">
                 <div>
@@ -56,7 +59,7 @@ export function Header({ isDarkMode, toggleDarkMode, onAdminOpen, profiles }) {
                     <button
                         onClick={toggleFullscreen}
                         className="p-3 bg-white dark:bg-black border-2 border-slate-300 dark:border-emerald-800 text-slate-500 dark:text-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-300 hover:border-emerald-400 transition-all shadow-sm dark:shadow-[0_0_15px_rgba(16,185,129,0.15)]"
-                        style={{ clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%)' }}
+                        style={{ clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 12px)' }}
                         aria-label="Kiosk Mode"
                         title="Kiosk Mode"
                     >
@@ -65,7 +68,7 @@ export function Header({ isDarkMode, toggleDarkMode, onAdminOpen, profiles }) {
                     <button
                         onClick={toggleDarkMode}
                         className="p-3 bg-white dark:bg-black border-2 border-slate-300 dark:border-cyan-800 text-slate-500 dark:text-cyan-400 hover:text-cyan-600 dark:hover:text-cyan-300 hover:border-cyan-400 transition-all shadow-sm dark:shadow-[0_0_15px_rgba(34,211,238,0.15)]"
-                        style={{ clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%)' }}
+                        style={{ clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 12px)' }}
                         aria-label="Toggle Dark Mode"
                     >
                         {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
@@ -73,7 +76,7 @@ export function Header({ isDarkMode, toggleDarkMode, onAdminOpen, profiles }) {
                     <button
                         onClick={onAdminOpen}
                         className="p-3 bg-white dark:bg-black border-2 border-slate-300 dark:border-fuchsia-900 text-slate-500 dark:text-fuchsia-500 hover:text-fuchsia-600 dark:hover:text-fuchsia-300 hover:border-fuchsia-400 transition-all shadow-sm"
-                        style={{ clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%)' }}
+                        style={{ clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 12px)' }}
                         aria-label="Admin Panel"
                         title="Admin Panel"
                     >
@@ -83,7 +86,25 @@ export function Header({ isDarkMode, toggleDarkMode, onAdminOpen, profiles }) {
                     <WeatherWidget />
                 </div>
             </div>
+            </div>
 
+            {/* Widget Row */}
+            <div className="flex flex-col lg:flex-row gap-6 w-full items-stretch">
+                <div className="flex-1 overflow-x-auto custom-scrollbar-hide">
+                    <AgentProfiles 
+                        profiles={profiles} 
+                        chores={chores} 
+                        birthdayProfiles={birthdayProfiles} 
+                        compact={true} 
+                    />
+                </div>
+                <div className="lg:w-[350px] flex-none">
+                    <FamilyBonus 
+                        profiles={profiles} 
+                        compact={true} 
+                    />
+                </div>
+            </div>
 
             <div className="flex md:hidden w-full mt-2 gap-4">
                 <button
