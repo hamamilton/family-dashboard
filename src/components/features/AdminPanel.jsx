@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Plus, Trash2, Edit2, Save, LogOut, ChevronDown, ChevronUp, Loader2, Shield } from 'lucide-react';
+import { X, Plus, Trash2, Edit2, Save, LogOut, ChevronDown, ChevronUp, Loader2, Shield, Copy } from 'lucide-react';
 import { useAdmin } from '../../hooks/useAdmin';
 
 const PB_URL = 'https://hamilton-family-db.fly.dev';
@@ -463,15 +463,29 @@ export function AdminPanel({ isOpen, onClose }) {
                                             <div className="flex gap-2 flex-none">
                                                 <button onClick={() => setEditingChore({
                                                     ...chore,
+                                                    id: undefined, // Remove ID to create new
+                                                    chore_name: `${chore.chore_name} (Copy)`,
                                                     assigned_to: Array.isArray(chore.assigned_to) ? chore.assigned_to : [chore.assigned_to].filter(Boolean),
                                                     due_dates: Array.isArray(chore.due_dates) ? chore.due_dates : [],
                                                     round_robin_pool: Array.isArray(chore.round_robin_pool) ? chore.round_robin_pool : [],
                                                 })}
-                                                    className="p-1.5 text-slate-500 hover:text-cyan-400 transition-colors">
+                                                    className="p-1.5 text-slate-500 hover:text-amber-400 transition-colors"
+                                                    title="Duplicate">
+                                                    <Copy size={14} />
+                                                </button>
+                                                <button onClick={() => setEditingChore({
+                                                    ...chore,
+                                                    assigned_to: Array.isArray(chore.assigned_to) ? chore.assigned_to : [chore.assigned_to].filter(Boolean),
+                                                    due_dates: Array.isArray(chore.due_dates) ? chore.due_dates : [],
+                                                    round_robin_pool: Array.isArray(chore.round_robin_pool) ? chore.round_robin_pool : [],
+                                                })}
+                                                    className="p-1.5 text-slate-500 hover:text-cyan-400 transition-colors"
+                                                    title="Edit">
                                                     <Edit2 size={14} />
                                                 </button>
                                                 <button onClick={() => handleDelete(chore.id)}
-                                                    className="p-1.5 text-slate-500 hover:text-rose-400 transition-colors">
+                                                    className="p-1.5 text-slate-500 hover:text-rose-400 transition-colors"
+                                                    title="Delete">
                                                     <Trash2 size={14} />
                                                 </button>
                                             </div>

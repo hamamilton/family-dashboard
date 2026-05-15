@@ -208,7 +208,9 @@ export function useChores(groupBy) {
     const toggleChore = async (choreId, currentStatus) => {
         const chore = chores.find(c => c.id === choreId);
         if (!chore) return;
-        const assignedToArray = Array.isArray(chore.assigned_to) ? chore.assigned_to : [chore.assigned_to].filter(Boolean);
+        const assignedToArray = Array.isArray(chore.assigned_to) 
+            ? chore.assigned_to 
+            : (typeof chore.assigned_to === 'string' ? chore.assigned_to.split(',').map(s => s.trim()) : []);
         const assignedProfiles = profiles.filter(p => assignedToArray.includes(p.id) || assignedToArray.includes(p.name));
         const newStatus = !currentStatus;
 
@@ -312,13 +314,21 @@ export function useChores(groupBy) {
 
     // (Keep your groupedChores and sortedGroupEntries logic here)
     const expandedChores = chores.flatMap(c => {
-        let assignedToArray = Array.isArray(c.assigned_to) ? c.assigned_to : [c.assigned_to].filter(Boolean);
+        let assignedToArray = [];
+        if (Array.isArray(c.assigned_to)) {
+            assignedToArray = c.assigned_to;
+        } else if (typeof c.assigned_to === 'string' && c.assigned_to.trim() !== '') {
+            assignedToArray = c.assigned_to.split(',').map(s => s.trim());
+        }
+        
         if (assignedToArray.length === 0) assignedToArray = ['Unassigned'];
 
         const resolvedNames = assignedToArray.map(val => {
             const p = profiles.find(p => p.id === val || p.name === val);
             return p ? p.name : val;
         });
+
+        const allNames = resolvedNames.join(', ');
 
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
         const todayIdx = new Date().getDay();
@@ -369,17 +379,30 @@ export function useChores(groupBy) {
                 
                 const displayDay = i === 0 ? `Today (${targetDayName})` : targetDayName;
 
-                namesForDay.forEach(n => {
+                if (groupBy === 'assigned_to' && namesForDay.length > 0) {
+                    namesForDay.forEach(n => {
+                        projected.push({
+                            ...c,
+                            id: i === 0 ? `${c.id}_${n}` : `${c.id}_future_${i}_${n}`,
+                            assigned_to: allNames, // Show all names
+                            assigned_to_group: n, // Use this for grouping
+                            day_due: displayDay,
+                            is_completed: i === 0 ? c.is_completed : false,
+                            is_future: i > 0,
+                            sort_order: i
+                        });
+                    });
+                } else {
                     projected.push({
                         ...c,
-                        id: i === 0 ? c.id : `${c.id}_future_${i}_${n}`,
-                        assigned_to: n,
+                        id: i === 0 ? c.id : `${c.id}_future_${i}`,
+                        assigned_to: allNames,
                         day_due: displayDay,
                         is_completed: i === 0 ? c.is_completed : false,
                         is_future: i > 0,
                         sort_order: i
                     });
-                });
+                }
 
                 assignmentCounter++;
             }
@@ -391,16 +414,27 @@ export function useChores(groupBy) {
         if (c.frequency === 'monthly') day_due = 'Monthly';
         else if (c.frequency === 'none' || !c.frequency) day_due = 'One-off Tasks';
 
-        return resolvedNames.map(n => ({
+        if (groupBy === 'assigned_to' && resolvedNames.length > 0) {
+            return resolvedNames.map(n => ({
+                ...c,
+                assigned_to: allNames,
+                assigned_to_group: n,
+                day_due,
+                sort_order: 99
+            }));
+        }
+
+        return [{
             ...c,
-            assigned_to: n,
+            assigned_to: allNames,
             day_due,
             sort_order: 99
-        }));
+        }];
     });
 
     const groupedChores = expandedChores.reduce((acc, chore) => {
-        const key = chore[groupBy] || 'Uncategorized';
+        const groupField = groupBy === 'assigned_to' ? 'assigned_to_group' : groupBy;
+        const key = chore[groupField] || 'Uncategorized';
         if (!acc[key]) acc[key] = [];
         acc[key].push(chore);
         return acc;
