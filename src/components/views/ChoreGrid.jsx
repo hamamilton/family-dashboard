@@ -1,8 +1,9 @@
-import { GripHorizontal } from 'lucide-react';
+import { useState } from 'react';
+import { GripHorizontal, Plus, Send } from 'lucide-react';
 import { RewardBar } from '../features/RewardBar';
 import { ChoreCard } from '../features/ChoreCard';
 
-export function ChoreGrid({ sortedGroupEntries, profiles, groupBy, toggleChore, birthdayProfiles = [] }) {
+export function ChoreGrid({ sortedGroupEntries, profiles, groupBy, toggleChore, reassignChore, birthdayProfiles = [] }) {
     if (sortedGroupEntries.length === 0) {
         return (
             <div className="p-20 text-center border-4 border-dashed border-slate-300 dark:border-slate-800 rounded-[3rem] bg-slate-100 dark:bg-slate-900/30">
@@ -20,7 +21,7 @@ export function ChoreGrid({ sortedGroupEntries, profiles, groupBy, toggleChore, 
                 </h2>
                 <div className="h-[2px] flex-1 bg-gradient-to-r from-cyan-400 via-fuchsia-500 to-transparent shadow-sm dark:shadow-[0_0_10px_rgba(192,38,211,0.5)]"></div>
             </div>
-            
+
             <div className="space-y-16 flex-1 overflow-y-auto pr-2 custom-scrollbar">
             {sortedGroupEntries.map(([groupName, items]) => {
                 // Find profile to pass to the RewardBar (only applies when grouped by Person)
@@ -53,12 +54,13 @@ export function ChoreGrid({ sortedGroupEntries, profiles, groupBy, toggleChore, 
                                 <p className="text-slate-600 dark:text-slate-400 font-mono tracking-widest">ALL CHORES SUSPENDED. ENJOY YOUR REST DAY!</p>
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
+                            <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-6">
                                 {items.map((chore) => (
                                     <ChoreCard
                                         key={chore.id}
                                         chore={chore}
                                         onToggle={toggleChore}
+                                        onReassign={reassignChore}
                                     />
                                 ))}
                             </div>

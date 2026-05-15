@@ -44,7 +44,7 @@ function App() {
   const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
   const [adminOpen, setAdminOpen] = useState(false);
 
-  const { sortedGroupEntries, loading, toggleChore, chores, profiles, todayHoliday, birthdayProfiles } = useChores(groupBy);
+  const { sortedGroupEntries, loading, toggleChore, reassignChore, addChore, chores, profiles, todayHoliday, birthdayProfiles } = useChores(groupBy);
   const { layouts, onLayoutChange } = useLayout();
   const [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
   const [mounted, setMounted] = useState(false);
@@ -68,6 +68,7 @@ function App() {
           isDarkMode={isDarkMode} 
           toggleDarkMode={toggleDarkMode}
           onAdminOpen={() => setAdminOpen(true)}
+          profiles={profiles}
         />
       </div>
       <AdminPanel isOpen={adminOpen} onClose={() => setAdminOpen(false)} />
@@ -119,6 +120,8 @@ function App() {
                 profiles={profiles}
                 groupBy={groupBy}
                 toggleChore={toggleChore}
+                reassignChore={reassignChore}
+                addChore={addChore}
                 birthdayProfiles={birthdayProfiles}
               />
             </div>
@@ -135,9 +138,7 @@ function App() {
               <FamilyBonus profiles={profiles} />
             </div>
 
-            <div key="quest" className="flex flex-col h-full">
-              <SideQuest profiles={profiles} />
-            </div>
+
 
             <div key="meals" className="flex flex-col h-full bg-white dark:bg-black border-2 border-slate-300 dark:border-cyan-900 shadow-lg">
               <MealPlanner />

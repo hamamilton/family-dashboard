@@ -53,7 +53,7 @@ export function CalendarView({ profiles = [] }) {
         end: '',
         assigned_to: 'Everyone'
     });
-    const [view, setView] = useState('month');
+    const [view, setView] = useState('week');
     const [date, setDate] = useState(new Date());
 
     const handleSelectSlot = (slotInfo) => {
@@ -137,6 +137,7 @@ export function CalendarView({ profiles = [] }) {
                     events={events}
                     startAccessor="start"
                     endAccessor="end"
+                    scrollToTime={new Date(1970, 1, 1, 7)}
                     style={{ height: '100%' }}
                     components={{
                         event: (props) => <EventComponent {...props} profiles={profiles} />

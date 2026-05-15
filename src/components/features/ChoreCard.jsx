@@ -1,7 +1,7 @@
-import { CheckSquare, Square, AlertCircle } from 'lucide-react';
+import { CheckSquare, Square, AlertCircle, Repeat } from 'lucide-react';
 import { getDaysLate } from '../../hooks/useChores';
 
-export function ChoreCard({ chore, onToggle }) {
+export function ChoreCard({ chore, onToggle, onReassign }) {
     return (
         <button
             onClick={() => { if (!chore.is_future) onToggle(chore.id, chore.is_completed) }}
@@ -22,11 +22,24 @@ export function ChoreCard({ chore, onToggle }) {
                         {chore.chore_name}
                     </h3>
                     <div className="flex justify-between items-center mt-2">
-                        <p className={`text-sm tracking-[0.2em] font-bold ${chore.is_completed ? 'text-emerald-700 dark:text-emerald-900' : 'text-fuchsia-600 dark:text-fuchsia-500'
-                            }`}>
-                            <span className="text-slate-400 dark:text-slate-600 mr-2">&gt;</span>
+                        <button 
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (!chore.is_future) onReassign(chore.id);
+                            }}
+                            className={`flex items-center gap-2 group/assignee text-sm tracking-[0.2em] font-bold transition-colors ${
+                                chore.is_completed 
+                                    ? 'text-emerald-700 dark:text-emerald-900 cursor-default' 
+                                    : 'text-fuchsia-600 dark:text-fuchsia-500 hover:text-fuchsia-400'
+                            }`}
+                            disabled={chore.is_completed || chore.is_future}
+                        >
+                            <span className="text-slate-400 dark:text-slate-600 mr-1">&gt;</span>
                             {chore.assigned_to || 'UNASSIGNED'}
-                        </p>
+                            {!chore.is_completed && !chore.is_future && (
+                                <Repeat size={12} className="opacity-0 group-hover/assignee:opacity-100 transition-opacity" />
+                            )}
+                        </button>
                         
                         {!chore.is_completed && getDaysLate(chore) > 0 && (
                             <div className="flex items-center gap-1 text-[10px] bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400 px-2 py-1 font-bold tracking-widest border border-red-300 dark:border-red-800 animate-pulse">

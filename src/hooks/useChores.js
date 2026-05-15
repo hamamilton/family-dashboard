@@ -17,13 +17,20 @@ export function getDaysLate(chore) {
         if (dates.length === 0) return 0;
         
         let minDiff = Infinity;
+        const createdDate = new Date(chore.created || Date.now());
+        createdDate.setHours(0,0,0,0);
+
         for (let dueDay of dates) {
             let dueDate = new Date(now.getFullYear(), now.getMonth(), dueDay);
             if (now.getDate() < dueDay) {
                 dueDate = new Date(now.getFullYear(), now.getMonth() - 1, dueDay);
             }
-            const diffDays = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
-            if (diffDays >= 0 && diffDays < minDiff) minDiff = diffDays;
+            dueDate.setHours(0,0,0,0);
+
+            if (dueDate >= createdDate) {
+                const diffDays = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+                if (diffDays >= 0 && diffDays < minDiff) minDiff = diffDays;
+            }
         }
         return minDiff === Infinity ? 0 : minDiff;
     }
@@ -38,10 +45,19 @@ export function getDaysLate(chore) {
         
         const currentDayInt = now.getDay();
         let minDiff = Infinity;
+        const createdDate = new Date(chore.created || Date.now());
+        createdDate.setHours(0,0,0,0);
+
         for (let dueDayInt of days) {
             let diff = currentDayInt - dueDayInt;
             if (diff < 0) diff += 7;
-            if (diff < minDiff) minDiff = diff;
+            
+            let actualDueDate = new Date(now.getTime() - diff * 24 * 60 * 60 * 1000);
+            actualDueDate.setHours(0,0,0,0);
+
+            if (actualDueDate >= createdDate) {
+                if (diff < minDiff) minDiff = diff;
+            }
         }
         return minDiff === Infinity ? 0 : minDiff;
     }
@@ -101,21 +117,16 @@ export function useChores(groupBy) {
                     if (Array.isArray(c.round_robin_pool) && c.round_robin_pool.length > 0) {
                         pool = c.round_robin_pool.map(val => {
                             const profile = profileList.find(p => p.id === val || p.name === val);
-                            return profile ? profile.name : val;
-                        }).filter(Boolean);
-                    } else if (typeof c.round_robin_pool === 'string' && c.round_robin_pool.trim() !== '') {
-                        pool = c.round_robin_pool.split(',').map(val => {
-                            const profile = profileList.find(p => p.id === val.trim() || p.name === val.trim());
-                            return profile ? profile.name : val.trim();
+                            return profile ? profile.id : null;
                         }).filter(Boolean);
                     } else {
-                        pool = profileList.map(p => p.name);
+                        pool = profileList.map(p => p.id);
                     }
                     
                     if (pool.length > 0) {
                         if (pool.length > 1) {
-                            const currentAssignedName = c.assigned_to;
-                            const currentIdx = pool.indexOf(currentAssignedName);
+                            const currentAssignedId = c.assigned_to;
+                            const currentIdx = pool.indexOf(currentAssignedId);
                             const nextIdx = currentIdx === -1 ? 0 : (currentIdx + 1) % pool.length;
                             updateData.assigned_to = pool[nextIdx];
                         } else if (pool.length === 1) {
@@ -137,20 +148,15 @@ export function useChores(groupBy) {
                     if (Array.isArray(c.round_robin_pool) && c.round_robin_pool.length > 0) {
                         pool = c.round_robin_pool.map(val => {
                             const profile = profileList.find(p => p.id === val || p.name === val);
-                            return profile ? profile.name : val;
-                        }).filter(Boolean);
-                    } else if (typeof c.round_robin_pool === 'string' && c.round_robin_pool.trim() !== '') {
-                        pool = c.round_robin_pool.split(',').map(val => {
-                            const profile = profileList.find(p => p.id === val.trim() || p.name === val.trim());
-                            return profile ? profile.name : val.trim();
+                            return profile ? profile.id : null;
                         }).filter(Boolean);
                     } else {
-                        pool = profileList.map(p => p.name);
+                        pool = profileList.map(p => p.id);
                     }
                     
                     if (pool.length > 0) {
-                        const assignedName = pool[index % pool.length];
-                        return pb.collection('chores').update(c.id, { assigned_to: assignedName });
+                        const assignedId = pool[index % pool.length];
+                        return pb.collection('chores').update(c.id, { assigned_to: assignedId });
                     }
                 }));
                 fetchData(); 
@@ -190,6 +196,9 @@ export function useChores(groupBy) {
             setBirthdayProfiles(bdays.map(p => p.name));
         } catch (err) {
             console.error("Fetch error:", err);
+            if (err.response) {
+                console.error("Detailed Error Response:", JSON.stringify(err.response, null, 2));
+            }
             setLoading(false);
         } finally {
             setLoading(false);
@@ -198,7 +207,9 @@ export function useChores(groupBy) {
 
     const toggleChore = async (choreId, currentStatus) => {
         const chore = chores.find(c => c.id === choreId);
-        const profile = profiles.find(p => p.name === chore.assigned_to);
+        if (!chore) return;
+        const assignedToArray = Array.isArray(chore.assigned_to) ? chore.assigned_to : [chore.assigned_to].filter(Boolean);
+        const assignedProfiles = profiles.filter(p => assignedToArray.includes(p.id) || assignedToArray.includes(p.name));
         const newStatus = !currentStatus;
 
         try {
@@ -208,25 +219,30 @@ export function useChores(groupBy) {
             // 1. Always update the chore status first
             await pb.collection('chores').update(choreId, { is_completed: newStatus });
 
-            // 2. Only try to update XP if a profile exists and we are CHECKING the box
-            if (profile && newStatus) {
-                const baseXP = chore.xp_reward || 10;
-                
-                // Calculate Late Penalty
-                let penaltyMultiplier = 1;
-                const daysLate = getDaysLate(chore);
-                if (daysLate > 0) {
-                    penaltyMultiplier = Math.max(0.1, 1 - (daysLate * 0.15));
+            // 2. Update XP for all assigned profiles
+            if (assignedProfiles.length > 0) {
+                for (const profile of assignedProfiles) {
+                    const baseXP = chore.xp_reward || 10;
+                    let penaltyMultiplier = 1;
+                    const daysLate = getDaysLate(chore);
+                    if (daysLate > 0) {
+                        penaltyMultiplier = Math.max(0.1, 1 - (daysLate * 0.15));
+                    }
+                    const isOp = profile.is_op || todayHoliday !== null; 
+                    const earnedXP = isOp ? Math.floor(baseXP * penaltyMultiplier * 1.5) : Math.floor(baseXP * penaltyMultiplier);
+
+                    let newBalance = profile.xp_balance;
+                    if (newStatus) {
+                        newBalance += earnedXP;
+                    } else {
+                        newBalance = Math.max(0, newBalance - earnedXP);
+                    }
+
+                    await pb.collection('profiles').update(profile.id, {
+                        xp_balance: newBalance,
+                        is_op: profile.is_op || (newBalance >= 1000)
+                    });
                 }
-
-                // Temporary OP status on holidays!
-                const isOp = profile.is_op || todayHoliday !== null; 
-                const earnedXP = isOp ? Math.floor(baseXP * penaltyMultiplier * 1.5) : Math.floor(baseXP * penaltyMultiplier);
-
-                await pb.collection('profiles').update(profile.id, {
-                    xp_balance: profile.xp_balance + earnedXP,
-                    is_op: profile.is_op || (profile.xp_balance + earnedXP >= 1000)
-                });
             }
 
             console.log(`Success: ${chore.chore_name} toggled to ${newStatus}`);
@@ -234,6 +250,52 @@ export function useChores(groupBy) {
             // Revert optimistic update on failure
             setChores(prev => prev.map(c => c.id === choreId ? { ...c, is_completed: currentStatus } : c));
             console.error("Update failed:", err);
+        }
+    };
+
+    const reassignChore = async (choreId) => {
+        const chore = chores.find(c => c.id === choreId);
+        if (!chore) return;
+
+        // Get pool
+        let pool = [];
+        if (Array.isArray(chore.round_robin_pool) && chore.round_robin_pool.length > 0) {
+            pool = chore.round_robin_pool.map(val => {
+                const profile = profiles.find(p => p.id === val || p.name === val);
+                return profile ? profile.id : null;
+            }).filter(Boolean);
+        } else {
+            pool = profiles.map(p => p.id);
+        }
+
+        if (pool.length <= 1) return;
+
+        const currentIdx = pool.indexOf(chore.assigned_to);
+        const nextIdx = (currentIdx + 1) % pool.length;
+        const nextId = pool[nextIdx];
+
+        try {
+            setChores(prev => prev.map(c => c.id === choreId ? { ...c, assigned_to: nextId } : c));
+            await pb.collection('chores').update(choreId, { assigned_to: nextId });
+        } catch (err) {
+            console.error("Reassign failed:", err);
+            setChores(prev => prev.map(c => c.id === choreId ? { ...c, assigned_to: chore.assigned_to } : c));
+        }
+    };
+
+    const addChore = async (choreName, assignedTo = '') => {
+        try {
+            const data = {
+                chore_name: choreName,
+                assigned_to: assignedTo,
+                frequency: 'none',
+                is_completed: false,
+                xp_reward: 25 
+            };
+            await pb.collection('chores').create(data);
+            fetchData();
+        } catch (err) {
+            console.error("Add chore failed:", err);
         }
     };
 
@@ -250,29 +312,35 @@ export function useChores(groupBy) {
 
     // (Keep your groupedChores and sortedGroupEntries logic here)
     const expandedChores = chores.flatMap(c => {
-        const assignedProfile = profiles.find(p => p.id === c.assigned_to || p.name === c.assigned_to);
-        const resolvedName = assignedProfile ? assignedProfile.name : c.assigned_to;
+        let assignedToArray = Array.isArray(c.assigned_to) ? c.assigned_to : [c.assigned_to].filter(Boolean);
+        if (assignedToArray.length === 0) assignedToArray = ['Unassigned'];
+
+        const resolvedNames = assignedToArray.map(val => {
+            const p = profiles.find(p => p.id === val || p.name === val);
+            return p ? p.name : val;
+        });
 
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
         const todayIdx = new Date().getDay();
 
         if (c.frequency === 'daily' || c.frequency === 'weekly') {
             let pool = [];
+            let isRoundRobin = false;
+            
             if (Array.isArray(c.round_robin_pool) && c.round_robin_pool.length > 0) {
+                isRoundRobin = true;
                 pool = c.round_robin_pool.map(val => {
                     const p = profiles.find(p => p.id === val || p.name === val);
                     return p ? p.name : val;
                 }).filter(Boolean);
             } else if (typeof c.round_robin_pool === 'string' && c.round_robin_pool.trim() !== '') {
+                isRoundRobin = true;
                 pool = c.round_robin_pool.split(',').map(val => {
                     const p = profiles.find(p => p.id === val.trim() || p.name === val.trim());
                     return p ? p.name : val.trim();
                 }).filter(Boolean);
-            } else {
-                pool = profiles.map(p => p.name);
             }
 
-            const currentIdx = pool.indexOf(resolvedName) === -1 ? 0 : pool.indexOf(resolvedName);
             const projected = [];
             let dueDays = [];
 
@@ -291,20 +359,26 @@ export function useChores(groupBy) {
                     continue;
                 }
 
-                const projectedName = pool.length > 0 
-                    ? pool[(currentIdx + assignmentCounter) % pool.length] 
-                    : resolvedName;
+                const namesForDay = [];
+                if (isRoundRobin) {
+                    const currentIdx = pool.indexOf(resolvedNames[0]) === -1 ? 0 : pool.indexOf(resolvedNames[0]);
+                    namesForDay.push(pool[(currentIdx + assignmentCounter) % pool.length]);
+                } else {
+                    namesForDay.push(...resolvedNames);
+                }
                 
                 const displayDay = i === 0 ? `Today (${targetDayName})` : targetDayName;
 
-                projected.push({
-                    ...c,
-                    id: i === 0 ? c.id : `${c.id}_future_${i}`,
-                    assigned_to: projectedName,
-                    day_due: displayDay,
-                    is_completed: i === 0 ? c.is_completed : false,
-                    is_future: i > 0,
-                    sort_order: i
+                namesForDay.forEach(n => {
+                    projected.push({
+                        ...c,
+                        id: i === 0 ? c.id : `${c.id}_future_${i}_${n}`,
+                        assigned_to: n,
+                        day_due: displayDay,
+                        is_completed: i === 0 ? c.is_completed : false,
+                        is_future: i > 0,
+                        sort_order: i
+                    });
                 });
 
                 assignmentCounter++;
@@ -317,12 +391,12 @@ export function useChores(groupBy) {
         if (c.frequency === 'monthly') day_due = 'Monthly';
         else if (c.frequency === 'none' || !c.frequency) day_due = 'One-off Tasks';
 
-        return [{
+        return resolvedNames.map(n => ({
             ...c,
-            assigned_to: resolvedName,
-            day_due: day_due,
+            assigned_to: n,
+            day_due,
             sort_order: 99
-        }];
+        }));
     });
 
     const groupedChores = expandedChores.reduce((acc, chore) => {
@@ -338,5 +412,5 @@ export function useChores(groupBy) {
         return orderA - orderB;
     });
 
-    return { chores, profiles, sortedGroupEntries, loading, toggleChore, todayHoliday, birthdayProfiles };
+    return { chores, profiles, sortedGroupEntries, loading, toggleChore, reassignChore, addChore, todayHoliday, birthdayProfiles };
 }

@@ -1,7 +1,8 @@
 import { User, Calendar as CalendarIcon, Repeat, Sun, Moon, Shield, Maximize } from 'lucide-react';
 import { WeatherWidget } from '../features/WeatherWidget';
+import { SideQuest } from '../features/SideQuest';
 
-export function Header({ isDarkMode, toggleDarkMode, onAdminOpen }) {
+export function Header({ isDarkMode, toggleDarkMode, onAdminOpen, profiles }) {
     const toggleFullscreen = async () => {
         try {
             const elem = document.documentElement;
@@ -78,6 +79,7 @@ export function Header({ isDarkMode, toggleDarkMode, onAdminOpen }) {
                     >
                         <Shield size={20} />
                     </button>
+                    <SideQuest profiles={profiles} compact={true} />
                     <WeatherWidget />
                 </div>
             </div>
@@ -108,7 +110,8 @@ export function Header({ isDarkMode, toggleDarkMode, onAdminOpen }) {
                 >
                     <Shield size={20} />
                 </button>
-                <div className="flex-1">
+                <div className="flex-1 flex gap-2">
+                    <SideQuest profiles={profiles} compact={true} />
                     <WeatherWidget />
                 </div>
             </div>

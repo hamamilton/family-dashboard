@@ -1,20 +1,79 @@
+import { useState, useEffect } from 'react';
 import { Sparkles, Trophy, MousePointer2, User } from 'lucide-react';
 import { useSideQuest } from '../../hooks/useSideQuest';
 
-export function SideQuest({ profiles = [] }) {
+export function SideQuest({ profiles = [], compact = false }) {
     const { quest, loading, claimQuest } = useSideQuest(profiles);
     const children = profiles.filter(p => !p.is_parent);
+    
+    const [shouldShow, setShouldShow] = useState(false);
+    
+    useEffect(() => {
+        const checkVisibility = () => {
+            const h = new Date().getHours();
+            // Show randomly between 7am and 7pm
+            if (h >= 7 && h <= 19) {
+                const currentKey = `quest_show_${new Date().toISOString().split('T')[0]}_${h}`;
+                let show = sessionStorage.getItem(currentKey);
+                if (show === null) {
+                    show = Math.random() > 0.5 ? 'true' : 'false';
+                    sessionStorage.setItem(currentKey, show);
+                }
+                setShouldShow(show === 'true');
+            } else {
+                setShouldShow(false);
+            }
+        };
+        checkVisibility();
+        const interval = setInterval(checkVisibility, 60000); // Check every minute
+        return () => clearInterval(interval);
+    }, []);
 
-    if (loading || !quest) {
-        return (
-            <div className="flex flex-col h-full bg-slate-900 border-2 border-slate-800 p-6 animate-pulse">
-                <div className="h-6 w-32 bg-slate-800 mb-4" />
-                <div className="h-12 w-full bg-slate-800" />
+    if (!shouldShow || loading || !quest) {
+        return compact ? <div className="hidden" /> : (
+            <div className="flex flex-col h-full bg-slate-100 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 p-6">
+                <p className="text-slate-400 font-mono text-center my-auto tracking-widest text-sm">NO ACTIVE QUESTS DETECTED</p>
             </div>
         );
     }
 
     const completedBy = quest.expand?.completed_by;
+
+    if (compact) {
+        return (
+            <div className={`flex items-center gap-3 p-2 px-4 border-2 font-mono transition-all duration-500 flex-1 relative overflow-hidden group ${
+                quest.is_completed 
+                ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-500/50' 
+                : 'bg-white dark:bg-black border-cyan-500 dark:border-cyan-900 shadow-[0_0_10px_rgba(6,182,212,0.2)] animate-pulse'
+            }`} style={{ clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%)' }}>
+                <Sparkles size={16} className={quest.is_completed ? 'text-emerald-500' : 'text-cyan-500'} />
+                
+                <div className="flex-1 min-w-0">
+                    <p className={`text-[10px] font-black uppercase truncate ${quest.is_completed ? 'text-slate-500 line-through' : 'text-slate-800 dark:text-white'}`}>
+                        {quest.title}
+                    </p>
+                </div>
+
+                {!quest.is_completed ? (
+                    <div className="flex gap-1">
+                        {children.map(profile => (
+                            <button
+                                key={profile.id}
+                                onClick={() => claimQuest(profile.id)}
+                                className="bg-cyan-600 hover:bg-cyan-500 text-white px-2 py-1 text-[8px] font-black uppercase tracking-widest transition-all"
+                            >
+                                {profile.name.substring(0,3)}
+                            </button>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-[9px] font-black uppercase tracking-widest">
+                        <Trophy size={10} /> {completedBy?.name || 'Unknown'}
+                    </div>
+                )}
+            </div>
+        );
+    }
 
     return (
         <div className={`flex flex-col h-full border-2 p-6 font-mono transition-all duration-500 relative overflow-hidden group ${
