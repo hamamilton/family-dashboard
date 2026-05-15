@@ -208,6 +208,8 @@ export function useChores(groupBy) {
     const toggleChore = async (choreId, currentStatus) => {
         const chore = chores.find(c => c.id === choreId);
         if (!chore) return;
+        
+        // Robust parsing of assigned agents - handles both arrays (native PB) and strings (manual entry)
         const assignedToArray = Array.isArray(chore.assigned_to) 
             ? chore.assigned_to 
             : (typeof chore.assigned_to === 'string' ? chore.assigned_to.split(',').map(s => s.trim()) : []);
@@ -313,7 +315,9 @@ export function useChores(groupBy) {
     }, [fetchData]);
 
     // (Keep your groupedChores and sortedGroupEntries logic here)
+    // Maps the raw database chores into a display-ready format for the Mission Board
     const expandedChores = chores.flatMap(c => {
+        // Resolve assignee IDs into readable Names
         let assignedToArray = [];
         if (Array.isArray(c.assigned_to)) {
             assignedToArray = c.assigned_to;
@@ -328,6 +332,7 @@ export function useChores(groupBy) {
             return p ? p.name : val;
         });
 
+        // Joined string for display on a single card
         const allNames = resolvedNames.join(', ');
 
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -379,13 +384,16 @@ export function useChores(groupBy) {
                 
                 const displayDay = i === 0 ? `Today (${targetDayName})` : targetDayName;
 
+                // Special handling for the "By Person" group view:
+                // We split the chore into multiple sections so it shows up for each person,
+                // but each card still shows the full list of names.
                 if (groupBy === 'assigned_to' && namesForDay.length > 0) {
                     namesForDay.forEach(n => {
                         projected.push({
                             ...c,
                             id: i === 0 ? `${c.id}_${n}` : `${c.id}_future_${i}_${n}`,
-                            assigned_to: allNames, // Show all names
-                            assigned_to_group: n, // Use this for grouping
+                            assigned_to: allNames, // Display joined names
+                            assigned_to_group: n, // Target specific person for the group header
                             day_due: displayDay,
                             is_completed: i === 0 ? c.is_completed : false,
                             is_future: i > 0,
@@ -393,6 +401,7 @@ export function useChores(groupBy) {
                         });
                     });
                 } else {
+                    // Standard day view: just show the mission once with all names
                     projected.push({
                         ...c,
                         id: i === 0 ? c.id : `${c.id}_future_${i}`,

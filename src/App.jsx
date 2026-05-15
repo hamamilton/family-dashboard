@@ -43,6 +43,8 @@ function App() {
 
   const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
   const [adminOpen, setAdminOpen] = useState(false);
+
+  // Layout Lock state - prevents accidental dragging/resizing on touchscreens
   const [isLayoutLocked, setIsLayoutLocked] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('layout_locked') === 'true';
@@ -50,6 +52,7 @@ function App() {
     return false;
   });
 
+  // Persists the lock state and updates the UI
   const toggleLayoutLock = () => {
     const newState = !isLayoutLocked;
     setIsLayoutLocked(newState);
@@ -118,6 +121,7 @@ function App() {
               width={width - 48} // Subtracting the px-6 (24px * 2) to prevent horizontal scroll
               onLayoutChange={onLayoutChange}
               draggableHandle=".drag-handle"
+              // Pass the lock state to the grid to disable interaction
               isDraggable={!isLayoutLocked}
               isResizable={!isLayoutLocked}
               margin={[16, 16]}

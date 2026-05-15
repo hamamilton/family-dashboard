@@ -188,13 +188,29 @@ function QuickMissionForm({ profiles, adminRequest, onUpdate }) {
 function ChoreForm({ chore, profiles, onSave, onCancel, saving }) {
     const [form, setForm] = useState(chore);
 
-    const toggleMulti = (field, val) => {
-        setForm(f => ({
-            ...f,
-            [field]: f[field].includes(val)
-                ? f[field].filter(v => v !== val)
-                : [...f[field], val]
-        }));
+    // Synchronizes the internal form state when the mission selected for editing changes
+    useEffect(() => {
+        setForm(chore);
+    }, [chore]);
+
+    // Handles multi-selection fields (assignees, due dates, etc.)
+    // Ensures existing values (by ID or Name) are preserved while toggling new ones
+    const toggleMulti = (field, val, altVal) => {
+        setForm(f => {
+            const current = Array.isArray(f[field]) 
+                ? f[field] 
+                : (typeof f[field] === 'string' ? f[field].split(',').filter(Boolean).map(s => s.trim()) : []);
+            
+            const exists = current.includes(val) || (altVal && current.includes(altVal));
+            let next;
+            if (exists) {
+                next = current.filter(v => v !== val && v !== altVal);
+            } else {
+                next = [...current, val];
+            }
+            
+            return { ...f, [field]: next };
+        });
     };
 
     const handleSubmit = (e) => {
@@ -222,13 +238,14 @@ function ChoreForm({ chore, profiles, onSave, onCancel, saving }) {
                 </label>
                 <div className="flex flex-wrap gap-1.5">
                     {profiles.map(p => {
+                        // Check both ID and Name to ensure highlighting works regardless of how data was stored
                         const isSelected = Array.isArray(form.assigned_to) 
-                            ? form.assigned_to.includes(p.id) 
-                            : form.assigned_to === p.id;
+                            ? (form.assigned_to.includes(p.id) || form.assigned_to.includes(p.name))
+                            : (form.assigned_to === p.id || form.assigned_to === p.name);
                         
                         return (
                             <button key={p.id} type="button"
-                                onClick={() => toggleMulti('assigned_to', p.id)}
+                                onClick={() => toggleMulti('assigned_to', p.id, p.name)}
                                 className={`px-2 py-1 text-[10px] font-black uppercase border transition-colors ${isSelected
                                     ? 'border-cyan-400 bg-cyan-400/10 text-cyan-400'
                                     : 'border-slate-700 text-slate-500 hover:border-slate-500'}`}>
@@ -349,7 +366,8 @@ export function AdminPanel({ isOpen, onClose }) {
         try {
             const payload = {
                 chore_name: form.chore_name,
-                assigned_to: form.assigned_to,
+                // Save as a comma-separated string since the PocketBase field is 'text'
+                assigned_to: Array.isArray(form.assigned_to) ? form.assigned_to.join(', ') : form.assigned_to,
                 xp_reward: form.xp_reward,
                 frequency: form.frequency,
                 due_dates: form.due_dates,
@@ -412,6 +430,7 @@ export function AdminPanel({ isOpen, onClose }) {
                                 {editingChore.id ? 'Edit Chore' : 'New Chore'}
                             </h3>
                             <ChoreForm
+                                key={editingChore.id || 'new'}
                                 chore={editingChore}
                                 profiles={profiles}
                                 onSave={handleSave}
@@ -461,24 +480,37 @@ export function AdminPanel({ isOpen, onClose }) {
                                                 </div>
                                             </div>
                                             <div className="flex gap-2 flex-none">
-                                                <button onClick={() => setEditingChore({
-                                                    ...chore,
-                                                    id: undefined, // Remove ID to create new
-                                                    chore_name: `${chore.chore_name} (Copy)`,
-                                                    assigned_to: Array.isArray(chore.assigned_to) ? chore.assigned_to : [chore.assigned_to].filter(Boolean),
-                                                    due_dates: Array.isArray(chore.due_dates) ? chore.due_dates : [],
-                                                    round_robin_pool: Array.isArray(chore.round_robin_pool) ? chore.round_robin_pool : [],
-                                                })}
+                                                {/* Duplicate Mission Action */}
+                                                <button onClick={() => {
+                                                    const assignedToArray = Array.isArray(chore.assigned_to) 
+                                                        ? chore.assigned_to 
+                                                        : (typeof chore.assigned_to === 'string' ? chore.assigned_to.split(',').filter(Boolean).map(s => s.trim()) : []);
+                                                    
+                                                    setEditingChore({
+                                                        ...chore,
+                                                        id: undefined, // Remove ID to create new
+                                                        chore_name: `${chore.chore_name} (Copy)`,
+                                                        assigned_to: assignedToArray,
+                                                        due_dates: Array.isArray(chore.due_dates) ? chore.due_dates : [],
+                                                        round_robin_pool: Array.isArray(chore.round_robin_pool) ? chore.round_robin_pool : [],
+                                                    });
+                                                }}
                                                     className="p-1.5 text-slate-500 hover:text-amber-400 transition-colors"
                                                     title="Duplicate">
                                                     <Copy size={14} />
                                                 </button>
-                                                <button onClick={() => setEditingChore({
-                                                    ...chore,
-                                                    assigned_to: Array.isArray(chore.assigned_to) ? chore.assigned_to : [chore.assigned_to].filter(Boolean),
-                                                    due_dates: Array.isArray(chore.due_dates) ? chore.due_dates : [],
-                                                    round_robin_pool: Array.isArray(chore.round_robin_pool) ? chore.round_robin_pool : [],
-                                                })}
+                                                <button onClick={() => {
+                                                    const assignedToArray = Array.isArray(chore.assigned_to) 
+                                                        ? chore.assigned_to 
+                                                        : (typeof chore.assigned_to === 'string' ? chore.assigned_to.split(',').filter(Boolean).map(s => s.trim()) : []);
+
+                                                    setEditingChore({
+                                                        ...chore,
+                                                        assigned_to: assignedToArray,
+                                                        due_dates: Array.isArray(chore.due_dates) ? chore.due_dates : [],
+                                                        round_robin_pool: Array.isArray(chore.round_robin_pool) ? chore.round_robin_pool : [],
+                                                    });
+                                                }}
                                                     className="p-1.5 text-slate-500 hover:text-cyan-400 transition-colors"
                                                     title="Edit">
                                                     <Edit2 size={14} />

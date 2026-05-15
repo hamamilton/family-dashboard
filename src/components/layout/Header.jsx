@@ -56,6 +56,7 @@ export function Header({ isDarkMode, toggleDarkMode, onAdminOpen, profiles, chor
                 </div>
 
                 <div className="hidden lg:flex gap-2 items-center">
+                    {/* Layout Lock Toggle - High visibility button to prevent accidental widget movement */}
                     <button
                         onClick={toggleLayoutLock}
                         className={`p-3 bg-white dark:bg-black border-2 transition-all shadow-sm ${
@@ -120,6 +121,7 @@ export function Header({ isDarkMode, toggleDarkMode, onAdminOpen, profiles, chor
             </div>
 
             <div className="flex md:hidden w-full mt-2 gap-4">
+                {/* Mobile version of the Lock Toggle */}
                 <button
                     onClick={toggleLayoutLock}
                     className={`p-3 bg-white dark:bg-black border-2 transition-all ${
