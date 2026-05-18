@@ -188,7 +188,7 @@ function QuickMissionForm({ profiles, adminRequest, onUpdate }) {
                     type="submit" disabled={loading}
                     className="w-full bg-amber-900/50 hover:bg-amber-800 text-amber-400 border border-amber-800 p-2 text-xs font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
                 >
-                    <Send size={12} /> {loading ? 'Creating...' : 'Deploy Mission'}
+                    <Plus size={12} /> {loading ? 'Creating...' : 'Deploy Mission'}
                 </button>
             </div>
         </form>
@@ -366,6 +366,10 @@ export function AdminPanel({ isOpen, onClose }) {
             ]);
             setChores(choreData.items || []);
             setProfiles(profileData.items || []);
+        } catch (err) {
+            console.error('Admin data load failed:', err);
+            setChores([]);
+            setProfiles([]);
         } finally {
             setDataLoading(false);
         }

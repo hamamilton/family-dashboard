@@ -2,6 +2,11 @@ import { CheckSquare, Square, AlertCircle, Repeat } from 'lucide-react';
 import { getDaysLate } from '../../hooks/useChores';
 
 export function ChoreCard({ chore, onToggle, onReassign }) {
+    const assigneeList = Array.isArray(chore.assigned_to)
+        ? chore.assigned_to
+        : (typeof chore.assigned_to === 'string' ? chore.assigned_to.split(',').map(s => s.trim()).filter(Boolean) : []);
+    const hasMultipleAssignees = assigneeList.length > 1;
+
     return (
         <button
             onClick={() => { if (!chore.is_future) onToggle(chore.id, chore.is_completed) }}
@@ -25,14 +30,14 @@ export function ChoreCard({ chore, onToggle, onReassign }) {
                         <button 
                             onClick={(e) => {
                                 e.stopPropagation();
-                                if (!chore.is_future) onReassign(chore.id);
+                                if (!chore.is_future && !hasMultipleAssignees) onReassign(chore.id);
                             }}
                             className={`flex items-center gap-2 group/assignee text-sm tracking-[0.2em] font-bold transition-colors ${
                                 chore.is_completed 
                                     ? 'text-emerald-700 dark:text-emerald-900 cursor-default' 
                                     : 'text-fuchsia-600 dark:text-fuchsia-500 hover:text-fuchsia-400'
                             }`}
-                            disabled={chore.is_completed || chore.is_future}
+                            disabled={chore.is_completed || chore.is_future || hasMultipleAssignees}
                         >
                             <span className="text-slate-400 dark:text-slate-600 mr-1">&gt;</span>
                             {chore.assigned_to || 'UNASSIGNED'}

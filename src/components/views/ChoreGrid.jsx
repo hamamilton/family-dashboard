@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { GripHorizontal, Plus, Send } from 'lucide-react';
+import { GripHorizontal, Plus } from 'lucide-react';
 import { RewardBar } from '../features/RewardBar';
 import { ChoreCard } from '../features/ChoreCard';
 

@@ -3,6 +3,38 @@ import { pb } from '../lib/pocketbase';
 
 const dayMap = { "Sunday": 0, "Monday": 1, "Tuesday": 2, "Wednesday": 3, "Thursday": 4, "Friday": 5, "Saturday": 6 };
 
+function parseMultiValue(value) {
+    if (Array.isArray(value)) return value.map(v => String(v).trim()).filter(Boolean);
+    if (typeof value === 'string') {
+        return value
+            .split(',')
+            .map(v => v.trim())
+            .filter(Boolean);
+    }
+    return [];
+}
+
+function shuffleArray(items) {
+    const arr = [...items];
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+}
+
+function resolvePoolIds(chore, profileList) {
+    if (Array.isArray(chore.round_robin_pool) && chore.round_robin_pool.length > 0) {
+        const pool = chore.round_robin_pool.map(val => {
+            const profile = profileList.find(p => p.id === val || p.name === val);
+            return profile ? profile.id : null;
+        }).filter(Boolean);
+        return [...new Set(pool)];
+    }
+
+    return [...new Set(profileList.map(p => p.id))];
+}
+
 export function getDaysLate(chore) {
     if (!chore.frequency || chore.frequency === 'daily' || !chore.due_dates) return 0;
     
@@ -111,27 +143,18 @@ export function useChores(groupBy) {
             });
 
             if (choresToReset.length > 0) {
-                await Promise.all(choresToReset.map(async (c, index) => {
+                await Promise.all(choresToReset.map(async (c) => {
                     let updateData = { is_completed: false };
-                    let pool = [];
-                    if (Array.isArray(c.round_robin_pool) && c.round_robin_pool.length > 0) {
-                        pool = c.round_robin_pool.map(val => {
-                            const profile = profileList.find(p => p.id === val || p.name === val);
-                            return profile ? profile.id : null;
-                        }).filter(Boolean);
-                    } else {
-                        pool = profileList.map(p => p.id);
-                    }
+                    const pool = resolvePoolIds(c, profileList);
                     
-                    if (pool.length > 0) {
-                        if (pool.length > 1) {
-                            const currentAssignedId = c.assigned_to;
-                            const currentIdx = pool.indexOf(currentAssignedId);
-                            const nextIdx = currentIdx === -1 ? 0 : (currentIdx + 1) % pool.length;
-                            updateData.assigned_to = pool[nextIdx];
-                        } else if (pool.length === 1) {
-                            updateData.assigned_to = pool[0];
-                        }
+                    const currentAssigned = parseMultiValue(c.assigned_to);
+                    if (pool.length > 0 && currentAssigned.length <= 1) {
+                        const currentAssignedId = currentAssigned[0];
+                        const candidates = pool.length > 1 && currentAssignedId
+                            ? pool.filter(id => id !== currentAssignedId)
+                            : pool;
+                        const randomPool = candidates.length > 0 ? candidates : pool;
+                        updateData.assigned_to = randomPool[Math.floor(Math.random() * randomPool.length)];
                     }
 
                     return pb.collection('chores').update(c.id, updateData);
@@ -141,21 +164,36 @@ export function useChores(groupBy) {
             }
 
             // 1.5. Assign unassigned chores
-            const unassignedChores = rawChoreList.filter(c => !c.assigned_to);
+            const unassignedChores = rawChoreList.filter(c => parseMultiValue(c.assigned_to).length === 0);
             if (unassignedChores.length > 0) {
-                await Promise.all(unassignedChores.map(async (c, index) => {
-                    let pool = [];
-                    if (Array.isArray(c.round_robin_pool) && c.round_robin_pool.length > 0) {
-                        pool = c.round_robin_pool.map(val => {
-                            const profile = profileList.find(p => p.id === val || p.name === val);
-                            return profile ? profile.id : null;
-                        }).filter(Boolean);
-                    } else {
-                        pool = profileList.map(p => p.id);
+                const poolState = new Map();
+
+                const getNextShuffledAssignee = (poolIds) => {
+                    const key = [...poolIds].sort().join('|');
+                    const existing = poolState.get(key);
+
+                    if (!existing || existing.index >= existing.order.length) {
+                        let order = shuffleArray(poolIds);
+                        if (existing?.last && order.length > 1 && order[0] === existing.last) {
+                            order = [...order.slice(1), order[0]];
+                        }
+                        const nextState = { order, index: 0, last: existing?.last || null };
+                        poolState.set(key, nextState);
                     }
+
+                    const state = poolState.get(key);
+                    const assignee = state.order[state.index];
+                    state.index += 1;
+                    state.last = assignee;
+                    poolState.set(key, state);
+                    return assignee;
+                };
+
+                await Promise.all(unassignedChores.map(async (c) => {
+                    const pool = resolvePoolIds(c, profileList);
                     
                     if (pool.length > 0) {
-                        const assignedId = pool[index % pool.length];
+                        const assignedId = getNextShuffledAssignee(pool);
                         return pb.collection('chores').update(c.id, { assigned_to: assignedId });
                     }
                 }));
@@ -212,9 +250,7 @@ export function useChores(groupBy) {
         if (!chore) return;
         
         // Robust parsing of assigned agents - handles both arrays (native PB) and strings (manual entry)
-        const assignedToArray = Array.isArray(chore.assigned_to) 
-            ? chore.assigned_to 
-            : (typeof chore.assigned_to === 'string' ? chore.assigned_to.split(',').map(s => s.trim()) : []);
+        const assignedToArray = parseMultiValue(chore.assigned_to);
         const assignedProfiles = profiles.filter(p => assignedToArray.includes(p.id) || assignedToArray.includes(p.name));
         const newStatus = !currentStatus;
 
@@ -260,32 +296,30 @@ export function useChores(groupBy) {
     };
 
     const reassignChore = async (choreId) => {
-        const chore = chores.find(c => c.id === choreId);
+        const baseId = String(choreId).split('_')[0];
+        const chore = chores.find(c => c.id === baseId);
         if (!chore) return;
 
-        // Get pool
-        let pool = [];
-        if (Array.isArray(chore.round_robin_pool) && chore.round_robin_pool.length > 0) {
-            pool = chore.round_robin_pool.map(val => {
-                const profile = profiles.find(p => p.id === val || p.name === val);
-                return profile ? profile.id : null;
-            }).filter(Boolean);
-        } else {
-            pool = profiles.map(p => p.id);
+        const currentAssigned = parseMultiValue(chore.assigned_to);
+        if (currentAssigned.length > 1) {
+            return; // Shared chores should keep all assignees.
         }
+
+        // Get pool
+        const pool = resolvePoolIds(chore, profiles);
 
         if (pool.length <= 1) return;
 
-        const currentIdx = pool.indexOf(chore.assigned_to);
+        const currentIdx = pool.indexOf(currentAssigned[0]);
         const nextIdx = (currentIdx + 1) % pool.length;
         const nextId = pool[nextIdx];
 
         try {
-            setChores(prev => prev.map(c => c.id === choreId ? { ...c, assigned_to: nextId } : c));
-            await pb.collection('chores').update(choreId, { assigned_to: nextId });
+            setChores(prev => prev.map(c => c.id === baseId ? { ...c, assigned_to: nextId } : c));
+            await pb.collection('chores').update(baseId, { assigned_to: nextId });
         } catch (err) {
             console.error("Reassign failed:", err);
-            setChores(prev => prev.map(c => c.id === choreId ? { ...c, assigned_to: chore.assigned_to } : c));
+            setChores(prev => prev.map(c => c.id === baseId ? { ...c, assigned_to: chore.assigned_to } : c));
         }
     };
 
@@ -324,7 +358,7 @@ export function useChores(groupBy) {
         if (Array.isArray(c.assigned_to)) {
             assignedToArray = c.assigned_to;
         } else if (typeof c.assigned_to === 'string' && c.assigned_to.trim() !== '') {
-            assignedToArray = c.assigned_to.split(',').map(s => s.trim());
+            assignedToArray = parseMultiValue(c.assigned_to);
         }
         
         if (assignedToArray.length === 0) assignedToArray = ['Unassigned'];
