@@ -129,8 +129,14 @@ function XpAdjuster({ profiles, adminRequest, onUpdate }) {
 
 function QuickMissionForm({ profiles, adminRequest, onUpdate }) {
     const [name, setName] = useState('');
-    const [assignedTo, setAssignedTo] = useState('');
+    const [assignedTo, setAssignedTo] = useState([]);
     const [loading, setLoading] = useState(false);
+
+    const toggleAgent = (id) => {
+        setAssignedTo(prev => 
+            prev.includes(id) ? prev.filter(a => a !== id) : [...prev, id]
+        );
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -139,13 +145,13 @@ function QuickMissionForm({ profiles, adminRequest, onUpdate }) {
         try {
             await adminRequest('/api/collections/chores/records', 'POST', {
                 chore_name: name.trim(),
-                assigned_to: assignedTo,
+                assigned_to: assignedTo.join(', '),
                 frequency: 'none',
                 is_completed: false,
                 xp_reward: 25
             });
             setName('');
-            setAssignedTo('');
+            setAssignedTo([]);
             await onUpdate();
         } finally {
             setLoading(false);
@@ -164,22 +170,26 @@ function QuickMissionForm({ profiles, adminRequest, onUpdate }) {
                     placeholder="Task Name (e.g. Wash Car)"
                     className="w-full bg-black border border-slate-700 p-2 text-white text-xs outline-none"
                 />
-                <div className="flex gap-2">
-                    <select 
-                        value={assignedTo}
-                        onChange={e => setAssignedTo(e.target.value)}
-                        className="flex-1 bg-black border border-slate-700 p-2 text-white text-xs outline-none appearance-none"
-                    >
-                        <option value="">— Anyone —</option>
-                        {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>
-                    <button 
-                        type="submit" disabled={loading || !name.trim()}
-                        className="bg-amber-600 hover:bg-amber-500 text-white px-4 text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50"
-                    >
-                        {loading ? '...' : 'Deploy'}
-                    </button>
+                <div className="flex flex-wrap gap-1.5">
+                    {profiles.map(p => {
+                        const isSelected = assignedTo.includes(p.id);
+                        return (
+                            <button key={p.id} type="button"
+                                onClick={() => toggleAgent(p.id)}
+                                className={`px-2 py-1 text-[10px] font-black uppercase border transition-colors ${isSelected
+                                    ? 'border-amber-400 bg-amber-400/10 text-amber-400'
+                                    : 'border-slate-700 text-slate-500 hover:border-slate-500'}`}>
+                                {p.name}
+                            </button>
+                        );
+                    })}
                 </div>
+                <button 
+                    type="submit" disabled={loading}
+                    className="w-full bg-amber-900/50 hover:bg-amber-800 text-amber-400 border border-amber-800 p-2 text-xs font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
+                >
+                    <Send size={12} /> {loading ? 'Creating...' : 'Deploy Mission'}
+                </button>
             </div>
         </form>
     );
@@ -382,7 +392,10 @@ export function AdminPanel({ isOpen, onClose }) {
             }
             await loadData();
             setEditingChore(null);
-        } finally {
+            console.log(`Mission saved: ${form.chore_name}`);
+        } catch (err) {
+            console.error("Save failed:", err);
+            alert(`Error saving mission: ${err.message || 'Unknown error'}`);
             setSaving(false);
         }
     };
@@ -471,9 +484,15 @@ export function AdminPanel({ isOpen, onClose }) {
                                                 <p className="font-black uppercase tracking-wider text-white text-sm truncate">{chore.chore_name}</p>
                                                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                                                     <span className="text-[10px] text-slate-500 uppercase tracking-wider">
-                                                        {Array.isArray(chore.expand?.assigned_to) 
-                                                            ? chore.expand.assigned_to.map(p => p.name).join(', ') 
-                                                            : chore.expand?.assigned_to?.name || (Array.isArray(chore.assigned_to) ? chore.assigned_to.join(', ') : chore.assigned_to) || '—'}
+                                                        {(() => {
+                                                            const raw = chore.assigned_to;
+                                                            const ids = Array.isArray(raw) ? raw : (typeof raw === 'string' ? raw.split(',').filter(Boolean).map(s => s.trim()) : []);
+                                                            if (ids.length === 0) return '—';
+                                                            return ids.map(val => {
+                                                                const p = profiles.find(p => p.id === val || p.name === val);
+                                                                return p ? p.name : val;
+                                                            }).join(', ');
+                                                        })()}
                                                     </span>
                                                     <span className="text-[10px] text-cyan-700 uppercase">{chore.frequency}</span>
                                                     <span className="text-[10px] text-fuchsia-700">+{chore.xp_reward} XP</span>

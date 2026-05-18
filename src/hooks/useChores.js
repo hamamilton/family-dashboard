@@ -206,7 +206,9 @@ export function useChores(groupBy) {
     }, []);
 
     const toggleChore = async (choreId, currentStatus) => {
-        const chore = chores.find(c => c.id === choreId);
+        // Extract base ID (handles "id_Arthur" or "id_future_1" formats)
+        const baseId = String(choreId).split('_')[0];
+        const chore = chores.find(c => c.id === baseId);
         if (!chore) return;
         
         // Robust parsing of assigned agents - handles both arrays (native PB) and strings (manual entry)
@@ -419,9 +421,24 @@ export function useChores(groupBy) {
             if (projected.length > 0) return projected;
         }
 
-        let day_due = 'Uncategorized';
-        if (c.frequency === 'monthly') day_due = 'Monthly';
-        else if (c.frequency === 'none' || !c.frequency) day_due = 'One-off Tasks';
+        // Default handling for missions that don't match the current week view or have no frequency
+        let day_due = 'Unscheduled';
+        if (c.frequency === 'monthly') {
+            day_due = 'Monthly';
+        } else if (c.frequency === 'none' || !c.frequency) {
+            const createdDate = new Date(c.created);
+            const createdDayIdx = createdDate.getDay();
+            const createdDayName = days[createdDayIdx];
+            
+            // If created today, show as "Today (DayName)"
+            if (createdDayIdx === todayIdx && createdDate.toDateString() === new Date().toDateString()) {
+                day_due = `Today (${createdDayName})`;
+            } else {
+                day_due = createdDayName;
+            }
+        } else if (c.frequency === 'weekly' || c.frequency === 'daily') {
+            day_due = 'Unscheduled';
+        }
 
         if (groupBy === 'assigned_to' && resolvedNames.length > 0) {
             return resolvedNames.map(n => ({
