@@ -47,13 +47,13 @@ export function GroceryList() {
             </form>
 
             <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
-                {groceries.length === 0 ? (
+                {groceries.filter(item => !item.is_checked).length === 0 ? (
                     <div className="flex items-center justify-center h-full text-slate-400 dark:text-amber-900/50 text-xs font-bold tracking-widest uppercase">
                         Inventory Optimal
                     </div>
                 ) : (
                     <div className="flex flex-col gap-2">
-                        {groceries.map(item => (
+                        {groceries.filter(item => !item.is_checked).map(item => (
                             <button
                                 key={item.id}
                                 onClick={() => toggleGrocery(item.id)}

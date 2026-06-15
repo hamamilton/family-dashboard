@@ -79,18 +79,75 @@ export function useCalendar() {
         }
     };
 
-    const deleteEvent = async (id) => {
+    const addEvents = async (newEventsArray) => {
+        const eventsWithIds = newEventsArray.map((evt, idx) => ({
+            ...evt,
+            id: `temp-${Date.now()}-${idx}`
+        }));
+
         setEvents(prev => {
-            const next = prev.filter(e => e.id !== id);
+            const next = [...prev, ...eventsWithIds];
             localStorage.setItem('family_dashboard_events', JSON.stringify(next));
             return next;
         });
 
-        if (!id.startsWith('temp-') && !id.startsWith('mock-')) {
-            try {
-                await pb.collection('events').delete(id);
-            } catch (err) {
-                console.warn("Could not delete from Pocketbase.", err);
+        try {
+            await Promise.all(newEventsArray.map(newEvent => 
+                pb.collection('events').create({
+                    title: newEvent.title,
+                    date: newEvent.start.toISOString(),
+                    end: newEvent.end.toISOString(),
+                    assignee: newEvent.assigned_to,
+                    color: newEvent.color || '',
+                }, { requestKey: null }) // Prevent PocketBase auto-cancellation
+            ));
+            await fetchEvents();
+        } catch (err) {
+            console.warn("Could not save bulk events to Pocketbase.", err);
+        }
+    };
+
+    const deleteEvent = async (id, isSeries = false) => {
+        let eventsToDelete = [];
+        let newEventsState = [];
+
+        setEvents(prev => {
+            if (isSeries) {
+                // Find all events belonging to this series
+                const eventToDelete = prev.find(e => e.id === id);
+                if (eventToDelete && eventToDelete.color) {
+                    try {
+                        const meta = JSON.parse(eventToDelete.color);
+                        if (meta.seriesId) {
+                            eventsToDelete = prev.filter(e => {
+                                try {
+                                    const m = JSON.parse(e.color || '{}');
+                                    return m.seriesId === meta.seriesId;
+                                } catch(err) { return false; }
+                            });
+                            newEventsState = prev.filter(e => !eventsToDelete.includes(e));
+                            localStorage.setItem('family_dashboard_events', JSON.stringify(newEventsState));
+                            return newEventsState;
+                        }
+                    } catch(err) {}
+                }
+            }
+            
+            // Single event fallback
+            eventsToDelete = prev.filter(e => e.id === id);
+            newEventsState = prev.filter(e => e.id !== id);
+            localStorage.setItem('family_dashboard_events', JSON.stringify(newEventsState));
+            return newEventsState;
+        });
+
+        // Delete from DB
+        for (const evt of eventsToDelete) {
+            if (!evt.id.startsWith('temp-') && !evt.id.startsWith('mock-')) {
+                try {
+                    await pb.collection('events').delete(evt.id);
+                } catch (err) {
+                    console.warn(`Could not delete event ${evt.id} from Pocketbase.`, err);
+                }
             }
         }
     };
@@ -123,5 +180,14 @@ export function useCalendar() {
         }
     };
 
-    return { events, loading, addEvent, deleteEvent, updateEvent };
+    return { events, loading, addEvent, addEvents, deleteEvent, updateEvent };
 }
+
+export const getEventMetadata = (event) => {
+    if (!event.color) return null;
+    try {
+        return JSON.parse(event.color);
+    } catch(e) {
+        return null;
+    }
+};

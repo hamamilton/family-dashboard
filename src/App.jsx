@@ -1,35 +1,35 @@
 import { useState, useEffect } from 'react';
 import { useChores } from './hooks/useChores';
-import { useLayout } from './hooks/useLayout';
 import { Header } from './components/layout/Header';
+import { Sidebar } from './components/layout/Sidebar';
 import { ChoreGrid } from './components/views/ChoreGrid';
 import { CalendarView } from './components/views/CalendarView';
 import { GroceryList } from './components/features/GroceryList';
 import { MealPlanner } from './components/features/MealPlanner';
 import { PhotoAlbum } from './components/features/PhotoAlbum';
-import { AgentProfiles } from './components/features/AgentProfiles';
 import { AdminPanel } from './components/features/AdminPanel';
 import { GospelStudy } from './components/features/GospelStudy';
-import { FamilyBonus } from './components/features/FamilyBonus';
-import { SideQuest } from './components/features/SideQuest';
+import { LocalEvents } from './components/features/LocalEvents';
+import { LittleVillageEvents } from './components/features/LittleVillageEvents';
 import { RefreshCw } from 'lucide-react';
-import { Responsive } from 'react-grid-layout';
-import 'react-grid-layout/css/styles.css';
-import 'react-resizable/css/styles.css';
 
 function App() {
   const [groupBy, setGroupBy] = useState('day_due');
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
       const savedTheme = localStorage.getItem('theme');
-      if (savedTheme) {
-        return savedTheme === 'dark';
-      }
+      if (savedTheme) return savedTheme === 'dark';
       return window.matchMedia('(prefers-color-scheme: dark)').matches;
     }
-    return true; // Default to dark given original aesthetic
+    return true;
   });
 
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('activeTab') || 'mission');
+  const [appTheme, setAppTheme] = useState(() => localStorage.getItem('appTheme') || 'scifi');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === 'true');
+  const [adminOpen, setAdminOpen] = useState(false);
+
+  // Dark mode effect
   useEffect(() => {
     const root = window.document.documentElement;
     if (isDarkMode) {
@@ -41,129 +41,164 @@ function App() {
     }
   }, [isDarkMode]);
 
-  const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
-  const [adminOpen, setAdminOpen] = useState(false);
-
-  const { sortedGroupEntries, loading, toggleChore, chores, profiles, todayHoliday, birthdayProfiles } = useChores(groupBy);
-  const { layouts, onLayoutChange } = useLayout();
-  const [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
-  const [mounted, setMounted] = useState(false);
-
+  // App theme effect — applies a class to <body> for CSS variable overrides
   useEffect(() => {
-    setMounted(true);
-    const handleResize = () => setWidth(window.innerWidth);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+    const body = document.body;
+    body.classList.remove('theme-scifi', 'theme-ios', 'theme-android');
+    body.classList.add(`theme-${appTheme}`);
+    localStorage.setItem('appTheme', appTheme);
+  }, [appTheme]);
+
+  // Persist active tab and sidebar state
+  useEffect(() => { localStorage.setItem('activeTab', activeTab); }, [activeTab]);
+  useEffect(() => { localStorage.setItem('sidebarCollapsed', sidebarCollapsed); }, [sidebarCollapsed]);
+
+  const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
+
+  const { sortedGroupEntries, loading, toggleChore, chores, profiles, todayHoliday, birthdayProfiles, fetchError } = useChores(groupBy);
 
   const children = profiles.filter(p => !p.is_parent);
   const allChildrenMetGoal = children.length > 0 && children.every(c => (c.xp_balance || 0) >= 100);
 
   return (
-    <div className={`h-screen w-screen overflow-hidden flex flex-col bg-slate-50 dark:bg-black text-slate-900 dark:text-white font-mono tracking-tight transition-all duration-1000 ${
-      allChildrenMetGoal ? 'ring-8 ring-amber-400/50 shadow-[inset_0_0_100px_rgba(245,158,11,0.2)]' : ''
-    } bg-[linear-gradient(to_right,#0891b220_1px,transparent_1px),linear-gradient(to_bottom,#0891b220_1px,transparent_1px)] bg-[size:40px_40px]`}>
-      <div className="px-6 pt-4 flex-none">
-        <Header 
-          isDarkMode={isDarkMode} 
-          toggleDarkMode={toggleDarkMode}
-          onAdminOpen={() => setAdminOpen(true)}
-        />
-      </div>
+    <div className={`h-screen w-screen overflow-hidden flex flex-col app-root ${allChildrenMetGoal ? 'bonus-glow' : ''}`}>
+      {/* Top Header Bar */}
+      <Header
+        isDarkMode={isDarkMode}
+        childrenProfiles={children}
+        profiles={profiles}
+      />
+
       <AdminPanel isOpen={adminOpen} onClose={() => setAdminOpen(false)} />
 
+      {/* Error Banner */}
+      {fetchError && (
+        <div className="bg-red-600 text-white font-black uppercase tracking-[0.2em] p-2 text-center text-xs border-b-2 border-red-800 z-10 flex-none">
+          ⚠️ DATABASE ERROR: {fetchError} ⚠️
+        </div>
+      )}
+
+      {/* Holiday & Birthday Banners */}
       {todayHoliday && (
-        <div className="bg-gradient-to-r from-fuchsia-600 via-purple-600 to-cyan-600 text-white font-black uppercase tracking-[0.3em] p-3 text-center text-sm md:text-base border-b-4 border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.5)] z-10 flex-none">
-          ⚠️ REST DAY OVERRIDE: Happy {todayHoliday}! ALL AGENTS GRANTED TEMPORARY OP STATUS. 1.5x XP MULTIPLIER ACTIVE! ⚠️
+        <div className="bg-gradient-to-r from-fuchsia-600 via-purple-600 to-cyan-600 text-white font-black uppercase tracking-[0.3em] p-2 text-center text-xs border-b-2 border-cyan-400 z-10 flex-none">
+          ⚠️ REST DAY: Happy {todayHoliday}! 1.5x XP ACTIVE! ⚠️
         </div>
       )}
-
       {birthdayProfiles && birthdayProfiles.length > 0 && (
-        <div className="bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-white font-black uppercase tracking-[0.3em] p-3 text-center text-sm md:text-base border-b-4 border-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.5)] z-10 flex-none">
-          🎉 INITIATING BIRTHDAY PROTOCOL FOR: {birthdayProfiles.join(', ')}! CHORES SUSPENDED FOR THE DAY. 🎉
+        <div className="bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-white font-black uppercase tracking-[0.3em] p-2 text-center text-xs border-b-2 border-emerald-300 z-10 flex-none">
+          🎉 BIRTHDAY PROTOCOL: {birthdayProfiles.join(', ')}! CHORES SUSPENDED! 🎉
         </div>
       )}
 
-      {loading ? (
-        <div className="flex-1 flex flex-col items-center justify-center gap-4">
-          <RefreshCw className="animate-spin text-blue-500" size={64} />
-          <p className="text-slate-500 font-black uppercase tracking-widest animate-pulse">Syncing Database...</p>
-        </div>
-      ) : (
-        <div className="flex-1 w-full px-6 overflow-y-auto overflow-x-hidden min-h-0 relative custom-scrollbar pb-96">
-          {mounted && (
-            <Responsive
-              className="layout"
-              layouts={layouts}
-              breakpoints={{ xxl: 2560, xl: 1600, lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
-              cols={{ xxl: 24, xl: 16, lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }}
-              rowHeight={350}
-              width={width - 48} // Subtracting the px-6 (24px * 2) to prevent horizontal scroll
-              onLayoutChange={onLayoutChange}
-              draggableHandle=".drag-handle"
-              margin={[16, 16]}
-              containerPadding={[0, 16]}
-              useCSSTransforms={true}
-            >
-            <div key="agents" className="flex flex-col h-full bg-white dark:bg-black border-2 border-slate-300 dark:border-cyan-900 shadow-lg">
-              <AgentProfiles
-                profiles={profiles}
-                chores={chores}
-                birthdayProfiles={birthdayProfiles}
-              />
-            </div>
+      {/* Main Layout: Sidebar + Content */}
+      <div className="flex flex-1 min-h-0">
+        <Sidebar
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          appTheme={appTheme}
+          setAppTheme={setAppTheme}
+          onAdminClick={() => setAdminOpen(true)}
+          isCollapsed={sidebarCollapsed}
+          setIsCollapsed={setSidebarCollapsed}
+          isDarkMode={isDarkMode}
+          toggleDarkMode={toggleDarkMode}
+        />
 
-            <div key="chores" className="flex flex-col h-full bg-white dark:bg-black border-2 border-slate-300 dark:border-cyan-900 shadow-lg">
-              <ChoreGrid
-                sortedGroupEntries={sortedGroupEntries}
-                profiles={profiles}
-                groupBy={groupBy}
-                toggleChore={toggleChore}
-                birthdayProfiles={birthdayProfiles}
-              />
+        {/* Page Content */}
+        <main className="flex-1 min-w-0 overflow-y-auto custom-scrollbar page-bg flex flex-col">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center h-full gap-4">
+              <RefreshCw className="animate-spin text-blue-500" size={48} />
+              <p className="text-slate-500 font-black uppercase tracking-widest animate-pulse text-sm">Syncing Database...</p>
             </div>
-            
-            <div key="calendar" className="flex flex-col h-full bg-white dark:bg-black border-2 border-slate-300 dark:border-cyan-900 shadow-lg">
-              <CalendarView profiles={profiles} />
-            </div>
+          ) : (
+            <>
+              {/* MISSION PANEL */}
+              {activeTab === 'mission' && (
+                <div className="p-6 flex flex-col gap-6">
+                  <div className="page-card">
+                    <ChoreGrid
+                      sortedGroupEntries={sortedGroupEntries}
+                      profiles={profiles}
+                      groupBy={groupBy}
+                      toggleChore={toggleChore}
+                      birthdayProfiles={birthdayProfiles}
+                    />
+                  </div>
+                </div>
+              )}
 
-            <div key="gospel" className="flex flex-col h-full">
-              <GospelStudy />
-            </div>
+              {/* MASTER SCHEDULE */}
+              {activeTab === 'schedule' && (
+                <div className="p-6 flex-1 flex flex-col">
+                  <div className="page-card flex-1 min-h-[600px] flex flex-col">
+                    <CalendarView profiles={profiles} />
+                  </div>
+                </div>
+              )}
 
-            <div key="bonus" className="flex flex-col h-full">
-              <FamilyBonus profiles={profiles} />
-            </div>
+              {/* FOOD */}
+              {activeTab === 'food' && (
+                <div className="p-6 flex flex-col gap-6">
+                  <div className="page-card">
+                    <MealPlanner />
+                  </div>
+                </div>
+              )}
 
-            <div key="quest" className="flex flex-col h-full">
-              <SideQuest profiles={profiles} />
-            </div>
+              {/* SHOPPING */}
+              {activeTab === 'shopping' && (
+                <div className="p-6 flex flex-col gap-6">
+                  <div className="page-card">
+                    <GroceryList />
+                  </div>
+                </div>
+              )}
 
-            <div key="meals" className="flex flex-col h-full bg-white dark:bg-black border-2 border-slate-300 dark:border-cyan-900 shadow-lg">
-              <MealPlanner />
-            </div>
+              {/* COME, FOLLOW ME */}
+              {activeTab === 'gospel' && (
+                <div className="p-6 flex flex-col gap-6">
+                  <div className="page-card">
+                    <GospelStudy />
+                  </div>
+                </div>
+              )}
 
-            <div key="groceries" className="flex flex-col h-full bg-white dark:bg-black border-2 border-slate-300 dark:border-cyan-900 shadow-lg">
-              <GroceryList />
-            </div>
+              {/* FUN STUFF */}
+              {activeTab === 'fun' && (
+                <div className="p-6 flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="page-card min-h-[600px] flex flex-col lg:col-span-1">
+                    <LocalEvents />
+                  </div>
+                  <div className="page-card min-h-[600px] flex flex-col lg:col-span-2">
+                    <LittleVillageEvents />
+                  </div>
+                </div>
+              )}
 
-            <div key="photos" className="flex flex-col h-full bg-white dark:bg-black border-2 border-slate-300 dark:border-cyan-900 shadow-lg">
-              <PhotoAlbum />
-            </div>
-            </Responsive>
+              {/* MEMORY BANK */}
+              {activeTab === 'memories' && (
+                <div className="p-6 flex-1 flex flex-col">
+                  <div className="page-card flex-1 min-h-[600px] flex flex-col">
+                    <PhotoAlbum />
+                  </div>
+                </div>
+              )}
+            </>
           )}
-        </div>
-      )}
 
-      {!loading && (
-        <footer className="mt-4 pt-4 px-6 pb-4 border-t border-slate-800/50 flex justify-between items-center text-slate-600 font-bold uppercase text-[10px] tracking-[0.3em] flex-none">
-          <div>System: FamilyHub v1.5 // Active</div>
-          <div className="flex gap-8">
-            <span>Completed: {chores.filter(c => c.is_completed).length}</span>
-            <span>Pending: {chores.filter(c => !c.is_completed).length}</span>
-          </div>
-        </footer>
-      )}
+          {/* Footer */}
+          {!loading && (
+            <footer className="px-6 py-3 border-t border-slate-800/50 flex justify-between items-center text-slate-600 font-bold uppercase text-[10px] tracking-[0.3em]">
+              <div>FamilyHub v2.0 // {appTheme.toUpperCase()} MODE</div>
+              <div className="flex gap-6">
+                <span>Done: {chores.filter(c => c.is_completed).length}</span>
+                <span>Pending: {chores.filter(c => !c.is_completed).length}</span>
+              </div>
+            </footer>
+          )}
+        </main>
+      </div>
     </div>
   );
 }

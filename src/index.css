@@ -145,48 +145,282 @@ code {
   border-color: #22d3ee;
 }
 
-/* Custom Resize Handles for react-grid-layout */
-.react-resizable-handle {
-  width: 24px !important;
-  height: 24px !important;
-  bottom: 0 !important;
-  right: 0 !important;
-  background-image: none !important;
-  cursor: se-resize !important;
-  z-index: 50;
+/* ============================================
+   APP LAYOUT
+   ============================================ */
+.app-root {
+  background-color: #0a0a0f;
+  background-image: linear-gradient(to right, #0891b220 1px, transparent 1px),
+                    linear-gradient(to bottom, #0891b220 1px, transparent 1px);
+  background-size: 40px 40px;
+  color: #f3f4f6;
 }
 
-.react-resizable-handle::after {
-  content: "";
-  position: absolute;
-  bottom: 4px;
-  right: 4px;
-  width: 12px;
-  height: 12px;
-  border-right: 3px solid #22d3ee; /* cyan-400 */
-  border-bottom: 3px solid #22d3ee;
-  transition: all 0.2s;
-  opacity: 0.5;
+/* Light mode overrides */
+:root:not(.dark) .app-root {
+  background-color: #f0f4f8;
+  background-image: linear-gradient(to right, #cbd5e180 1px, transparent 1px),
+                    linear-gradient(to bottom, #cbd5e180 1px, transparent 1px);
+  color: #1e293b;
 }
 
-.react-resizable-handle:hover::after,
-.react-resizable-handle:active::after {
-  opacity: 1;
-  border-color: #f0abfc; /* fuchsia-400 */
-  width: 14px;
-  height: 14px;
+:root:not(.dark) .page-card {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(0, 0, 0, 0.1);
 }
 
-/* Ensure the grid can expand and doesn't clip dragging items */
-.react-grid-layout {
-  min-height: 100%;
-  transition: height 200ms ease;
+:root:not(.dark) .page-bg {
+  background-color: transparent;
 }
 
-.react-grid-placeholder {
-  background: rgba(34, 211, 238, 0.1) !important;
-  border: 2px dashed #22d3ee !important;
-  border-radius: 8px !important;
-  opacity: 0.5 !important;
-  z-index: 2 !important;
+.bonus-glow {
+  box-shadow: inset 0 0 100px rgba(245, 158, 11, 0.2);
+}
+
+.page-bg {
+  background-color: transparent;
+}
+
+.page-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.dark .page-card {
+  background: rgba(0,0,0,0.4);
+  border-color: rgba(34,211,238,0.12);
+}
+
+/* ============================================
+   HEADER
+   ============================================ */
+.header-bg {
+  background: rgba(17, 17, 27, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+:root:not(.dark) .header-bg {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: #e2e8f0;
+}
+
+:root:not(.dark) .header-bg h1 {
+  /* keep gradient text visible in light mode */
+}
+
+.child-xp-badge {
+  background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(34,211,238,0.3);
+}
+
+:root:not(.dark) .child-xp-badge {
+  background: rgba(255,255,255,0.8);
+  border-color: #a5b4fc;
+}
+
+:root:not(.dark) .child-xp-badge span {
+  color: #4f46e5;
+}
+
+/* ============================================
+   SIDEBAR
+   ============================================ */
+.sidebar-root {
+  background-color: #1e1e2a;
+  color: #c9c9d4;
+}
+
+:root:not(.dark) .sidebar-root {
+  background-color: #f8f9fa;
+  color: #374151;
+  border-color: #e2e8f0;
+}
+
+.sidebar-border {
+  border-color: #2e2e3e;
+}
+
+:root:not(.dark) .sidebar-border {
+  border-color: #e2e8f0;
+}
+
+.sidebar-btn {
+  color: #9ca3af;
+}
+
+.sidebar-btn:hover {
+  background-color: rgba(255,255,255,0.08);
+  color: #fff;
+}
+
+:root:not(.dark) .sidebar-btn {
+  color: #6b7280;
+}
+
+:root:not(.dark) .sidebar-btn:hover {
+  background-color: rgba(0,0,0,0.05);
+  color: #111827;
+}
+
+.sidebar-active {
+  background-color: rgba(255,255,255,0.12);
+  color: #fff;
+}
+
+:root:not(.dark) .sidebar-active {
+  background-color: #e0e7ff;
+  color: #4338ca;
+}
+
+.sidebar-inactive {
+  color: #9ca3af;
+}
+
+.sidebar-inactive:hover {
+  background-color: rgba(255,255,255,0.06);
+  color: #e5e7eb;
+}
+
+:root:not(.dark) .sidebar-inactive {
+  color: #6b7280;
+}
+
+:root:not(.dark) .sidebar-inactive:hover {
+  background-color: rgba(0,0,0,0.04);
+  color: #111827;
+}
+
+.sidebar-theme-active {
+  background-color: rgba(249,115,22,0.15);
+  color: #fb923c;
+}
+
+:root:not(.dark) .sidebar-theme-active {
+  background-color: #fff7ed;
+  color: #ea580c;
+}
+
+.sidebar-weather {
+  /* keep readable */
+}
+
+.custom-scrollbar::-webkit-scrollbar { width: 6px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #22d3ee; }
+
+.scrollbar-none::-webkit-scrollbar { display: none; }
+.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+
+
+
+
+
+/* ============================================
+   THEME: SCI-FI (default — no extra class needed)
+   ============================================ */
+body.theme-scifi {
+  --app-font: ui-monospace, Consolas, 'Courier New', monospace;
+  --app-radius: 0px;
+  --card-radius: 2px;
+  --btn-radius: 2px;
+  --app-accent: #22d3ee;
+  --app-accent-2: #c084fc;
+  --sidebar-bg: #1a1a2e;
+  --sidebar-border: #222244;
+}
+
+/* ============================================
+   THEME: iOS
+   ============================================ */
+body.theme-ios {
+  --app-font: -apple-system, 'SF Pro Display', BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+  --app-radius: 16px;
+  --card-radius: 16px;
+  --btn-radius: 12px;
+  --app-accent: #007AFF;
+  --app-accent-2: #AF52DE;
+  --sidebar-bg: rgba(28, 28, 30, 0.95);
+  --sidebar-border: rgba(255,255,255,0.1);
+
+  font-family: var(--app-font) !important;
+}
+
+body.theme-ios .app-root {
+  background-image: none;
+  background-color: #1c1c1e;
+}
+
+body.theme-ios .page-card {
+  border-radius: var(--card-radius);
+  background: rgba(44,44,46,0.85);
+  border-color: rgba(255,255,255,0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+body.theme-ios header {
+  border-radius: 0;
+  background: rgba(28,28,30,0.85) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+body.theme-ios * {
+  font-family: var(--app-font) !important;
+  letter-spacing: normal !important;
+}
+
+body.theme-ios h1, body.theme-ios h2, body.theme-ios h3 {
+  font-weight: 700;
+}
+
+/* ============================================
+   THEME: Android / Material You
+   ============================================ */
+body.theme-android {
+  --app-font: 'Google Sans', Roboto, 'Noto Sans', sans-serif;
+  --app-radius: 28px;
+  --card-radius: 8px;
+  --btn-radius: 100px;
+  --app-accent: #6750A4;
+  --app-accent-2: #E8DEF8;
+  --sidebar-bg: #1C1B1F;
+  --sidebar-border: rgba(202,196,208,0.15);
+
+  font-family: var(--app-font) !important;
+}
+
+body.theme-android .app-root {
+  background-image: none;
+  background-color: #141218;
+}
+
+body.theme-android .page-card {
+  border-radius: var(--card-radius);
+  background: rgba(37, 35, 42, 0.9);
+  border-color: rgba(202,196,208,0.15);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 4px 8px rgba(0,0,0,0.15);
+  padding: 12px;
+}
+
+body.theme-android header {
+  background: #1C1B1F !important;
+  border-color: rgba(202,196,208,0.15);
+}
+
+body.theme-android * {
+  font-family: var(--app-font) !important;
+  letter-spacing: 0.01em !important;
+}
+
+body.theme-android button {
+  border-radius: var(--btn-radius) !important;
+}
+
+body.theme-android .chore-card {
+  border-radius: var(--card-radius) !important;
 }

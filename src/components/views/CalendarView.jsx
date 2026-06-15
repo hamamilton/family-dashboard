@@ -7,7 +7,9 @@ import startOfWeek from 'date-fns/startOfWeek';
 import getDay from 'date-fns/getDay';
 import enUS from 'date-fns/locale/en-US';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
-import { useCalendar } from '../../hooks/useCalendar';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+import { useCalendar, getEventMetadata } from '../../hooks/useCalendar';
 
 const locales = {
   'en-US': enUS,
@@ -43,15 +45,19 @@ const EventComponent = ({ event, profiles }) => {
 };
 
 export function CalendarView({ profiles = [] }) {
-    const { events, loading, addEvent, deleteEvent, updateEvent } = useCalendar();
+    const { events, loading, addEvent, addEvents, deleteEvent, updateEvent } = useCalendar();
     
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [newEventData, setNewEventData] = useState({
         id: null,
         title: '',
-        start: '',
-        end: '',
-        assigned_to: 'Everyone'
+        start: new Date(),
+        end: new Date(),
+        assigned_to: 'Everyone',
+        isRecurring: false,
+        seriesId: null,
+        recurUntil: null,
+        selectedDays: []
     });
     const [view, setView] = useState('month');
     const [date, setDate] = useState(new Date());
@@ -60,46 +66,122 @@ export function CalendarView({ profiles = [] }) {
         setNewEventData({
             id: null,
             title: '',
-            start: format(slotInfo.start, "yyyy-MM-dd'T'HH:mm"),
-            end: format(slotInfo.end, "yyyy-MM-dd'T'HH:mm"),
-            assigned_to: 'Everyone'
+            start: slotInfo.start,
+            end: slotInfo.end,
+            assigned_to: 'Everyone',
+            isRecurring: false,
+            seriesId: null,
+            recurUntil: null,
+            selectedDays: []
         });
         setIsModalOpen(true);
     };
 
     const handleSelectEvent = (event) => {
+        const meta = getEventMetadata(event);
+        const isRecurring = !!meta?.seriesId;
+
         setNewEventData({
             id: event.id,
             title: event.title,
-            start: format(event.start, "yyyy-MM-dd'T'HH:mm"),
-            end: format(event.end, "yyyy-MM-dd'T'HH:mm"),
-            assigned_to: event.assigned_to
+            start: event.start,
+            end: event.end,
+            assigned_to: event.assigned_to,
+            isRecurring,
+            seriesId: meta?.seriesId || null,
+            recurUntil: meta?.recurUntil ? new Date(meta.recurUntil) : null,
+            selectedDays: meta?.selectedDays || []
         });
         setIsModalOpen(true);
     };
 
-    const handleDelete = () => {
+    const handleDelete = async () => {
         if (newEventData.id) {
-            deleteEvent(newEventData.id);
+            const isSeries = newEventData.isRecurring;
+            if (isSeries && !window.confirm('This is a recurring event. Delete entire series?')) {
+                // If they say no, just delete this one event
+                await deleteEvent(newEventData.id, false);
+            } else {
+                await deleteEvent(newEventData.id, isSeries);
+            }
             setIsModalOpen(false);
         }
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        if (newEventData.id) {
+        
+        const isEditingSeries = newEventData.id && newEventData.isRecurring;
+        const colorData = newEventData.isRecurring ? JSON.stringify({
+            seriesId: newEventData.seriesId || `series-${Date.now()}`,
+            recurUntil: newEventData.recurUntil,
+            selectedDays: newEventData.selectedDays
+        }) : '';
+
+        if (newEventData.id && !isEditingSeries) {
             updateEvent(newEventData.id, {
                 title: newEventData.title,
-                start: new Date(newEventData.start),
-                end: new Date(newEventData.end),
-                assigned_to: newEventData.assigned_to
+                start: newEventData.start,
+                end: newEventData.end,
+                assigned_to: newEventData.assigned_to,
+                color: colorData
             });
+        } else if (newEventData.isRecurring) {
+            if (isEditingSeries) {
+                // To update a series, delete old and generate new
+                if (!window.confirm('Update entire recurring series? This will regenerate all future instances.')) {
+                    // Just update single event
+                    updateEvent(newEventData.id, {
+                        title: newEventData.title,
+                        start: newEventData.start,
+                        end: newEventData.end,
+                        assigned_to: newEventData.assigned_to,
+                        color: '' // remove series link from this one
+                    });
+                    setIsModalOpen(false);
+                    return;
+                }
+                await deleteEvent(newEventData.id, true);
+            }
+            
+            const startD = newEventData.start;
+            const endD = newEventData.end;
+            const untilD = new Date(newEventData.recurUntil);
+            untilD.setHours(23, 59, 59, 999);
+            
+            const generatedEvents = [];
+            let current = new Date(startD);
+            
+            while (current <= untilD) {
+                if (newEventData.selectedDays.includes(current.getDay())) {
+                    const eStart = new Date(current);
+                    eStart.setHours(startD.getHours(), startD.getMinutes(), 0, 0);
+                    
+                    const eEnd = new Date(current);
+                    eEnd.setHours(endD.getHours(), endD.getMinutes(), 0, 0);
+
+                    if (eStart <= untilD) {
+                        generatedEvents.push({
+                            title: newEventData.title,
+                            start: eStart,
+                            end: eEnd,
+                            assigned_to: newEventData.assigned_to,
+                            color: colorData
+                        });
+                    }
+                }
+                current.setDate(current.getDate() + 1);
+            }
+            if (generatedEvents.length > 0) {
+                addEvents(generatedEvents);
+            }
         } else {
             addEvent({
                 title: newEventData.title,
-                start: new Date(newEventData.start),
-                end: new Date(newEventData.end),
-                assigned_to: newEventData.assigned_to
+                start: newEventData.start,
+                end: newEventData.end,
+                assigned_to: newEventData.assigned_to,
+                color: colorData
             });
         }
         setIsModalOpen(false);
@@ -180,21 +262,21 @@ export function CalendarView({ profiles = [] }) {
                             <div className="flex flex-col gap-6">
                                 <div>
                                     <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-cyan-600 mb-2">Start</label>
-                                    <input 
-                                        type="datetime-local" 
-                                        required
-                                        value={newEventData.start}
-                                        onChange={e => setNewEventData({...newEventData, start: e.target.value})}
+                                    <DatePicker 
+                                        selected={newEventData.start}
+                                        onChange={(date) => setNewEventData({...newEventData, start: date})}
+                                        showTimeSelect
+                                        dateFormat="MMM d, yyyy h:mm aa"
                                         className="w-full bg-slate-50 dark:bg-black border border-slate-300 dark:border-slate-800 p-3 text-sm text-slate-800 dark:text-white focus:outline-none focus:border-cyan-400 transition-colors"
                                     />
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-cyan-600 mb-2">End</label>
-                                    <input 
-                                        type="datetime-local" 
-                                        required
-                                        value={newEventData.end}
-                                        onChange={e => setNewEventData({...newEventData, end: e.target.value})}
+                                    <DatePicker 
+                                        selected={newEventData.end}
+                                        onChange={(date) => setNewEventData({...newEventData, end: date})}
+                                        showTimeSelect
+                                        dateFormat="MMM d, yyyy h:mm aa"
                                         className="w-full bg-slate-50 dark:bg-black border border-slate-300 dark:border-slate-800 p-3 text-sm text-slate-800 dark:text-white focus:outline-none focus:border-cyan-400 transition-colors"
                                     />
                                 </div>
@@ -213,6 +295,57 @@ export function CalendarView({ profiles = [] }) {
                                     ))}
                                 </select>
                             </div>
+
+                            <div className="mt-2">
+                                <label className="flex items-center gap-3 cursor-pointer">
+                                    <input 
+                                        type="checkbox"
+                                        checked={newEventData.isRecurring}
+                                        onChange={e => setNewEventData({...newEventData, isRecurring: e.target.checked})}
+                                        className="w-5 h-5 text-cyan-500 bg-slate-100 dark:bg-slate-900 border-slate-300 dark:border-cyan-800 rounded focus:ring-cyan-500 focus:ring-2 transition-all cursor-pointer accent-cyan-500"
+                                    />
+                                    <span className="text-xs font-bold uppercase tracking-widest text-slate-600 dark:text-cyan-500">Recurring Event</span>
+                                </label>
+                            </div>
+
+                            {newEventData.isRecurring && (
+                                <div className="flex flex-col gap-4 border-l-4 border-cyan-500 pl-4 py-2 bg-slate-50 dark:bg-cyan-950/10">
+                                    <div className="flex flex-col">
+                                        <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-cyan-700 mb-2">Repeat Until</label>
+                                        <DatePicker 
+                                            selected={newEventData.recurUntil}
+                                            onChange={(date) => setNewEventData({...newEventData, recurUntil: date})}
+                                            dateFormat="MMM d, yyyy"
+                                            className="w-full bg-white dark:bg-black border border-slate-300 dark:border-slate-800 p-3 text-sm text-slate-800 dark:text-white focus:outline-none focus:border-cyan-400 transition-colors"
+                                            placeholderText="Select end date"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-cyan-700 mb-2">On Days</label>
+                                        <div className="flex flex-wrap gap-2">
+                                            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => (
+                                                <button
+                                                    key={day}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const days = newEventData.selectedDays.includes(idx)
+                                                            ? newEventData.selectedDays.filter(d => d !== idx)
+                                                            : [...newEventData.selectedDays, idx];
+                                                        setNewEventData({...newEventData, selectedDays: days});
+                                                    }}
+                                                    className={`px-3 py-2 text-xs font-black uppercase tracking-wider border transition-colors ${
+                                                        newEventData.selectedDays.includes(idx) 
+                                                        ? 'bg-cyan-500 text-black border-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.4)]' 
+                                                        : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-300 dark:border-slate-700 hover:border-cyan-500 dark:hover:border-cyan-500'
+                                                    }`}
+                                                >
+                                                    {day}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
                             <div className="flex gap-4 mt-4">
                                 {newEventData.id && (

@@ -1,6 +1,6 @@
 import { Gift, Star, Trophy, PartyPopper } from 'lucide-react';
 
-export function FamilyBonus({ profiles = [] }) {
+export function FamilyBonus({ profiles = [], compact = false }) {
     const children = profiles.filter(p => !p.is_parent);
     const goalPerChild = 100;
     
@@ -14,7 +14,32 @@ export function FamilyBonus({ profiles = [] }) {
 
     const allMet = childrenStatus.every(c => c.met);
     const totalMet = childrenStatus.filter(c => c.met).length;
+    const progressPercent = (totalMet / childrenStatus.length) * 100;
     
+    if (compact) {
+        return (
+            <div className={`flex flex-col justify-center min-w-[150px] px-3 py-1 border rounded-md transition-all ${
+                allMet ? 'bg-amber-400 border-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.5)]' : 'bg-slate-800/50 border-[#444444]'
+            }`}>
+                <div className="flex justify-between items-center mb-1">
+                    <span className="text-[10px] font-bold text-gray-300 uppercase tracking-widest flex items-center gap-1">
+                        {allMet ? <PartyPopper size={12} className="text-white" /> : <Gift size={12} className="text-fuchsia-400" />}
+                        Bonus
+                    </span>
+                    <span className={`text-[10px] font-bold ${allMet ? 'text-white' : 'text-gray-400'}`}>
+                        {totalMet}/{childrenStatus.length}
+                    </span>
+                </div>
+                <div className="h-1.5 w-full bg-slate-700 rounded-full overflow-hidden">
+                    <div 
+                        className={`h-full transition-all duration-1000 ${allMet ? 'bg-white' : 'bg-gradient-to-r from-fuchsia-500 to-cyan-400'}`}
+                        style={{ width: `${progressPercent}%` }}
+                    />
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className={`flex flex-col h-full border-2 p-6 font-mono transition-all duration-700 ${
             allMet 

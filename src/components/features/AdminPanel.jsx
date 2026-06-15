@@ -9,12 +9,13 @@ const DATES = Array.from({ length: 31 }, (_, i) => String(i + 1));
 
 const EMPTY_CHORE = {
     chore_name: '',
-    assigned_to: '',
+    assigned_to: [],
     frequency: 'daily',
     due_dates: [],
     xp_reward: 10,
     round_robin_pool: [],
     is_completed: false,
+    rotation_period: 7,
 };
 
 function LoginForm({ onLogin, loading, error }) {
@@ -65,7 +66,9 @@ function LoginForm({ onLogin, loading, error }) {
 }
 
 function ChoreForm({ chore, profiles, onSave, onCancel, saving }) {
-    const [form, setForm] = useState(chore);
+    const initialName = (chore.chore_name || '').replace('[STRICT]', '').trim();
+    const [form, setForm] = useState({ ...chore, chore_name: initialName });
+    const [isStrict, setIsStrict] = useState((chore.chore_name || '').includes('[STRICT]'));
 
     const toggleMulti = (field, val) => {
         setForm(f => ({
@@ -78,7 +81,13 @@ function ChoreForm({ chore, profiles, onSave, onCancel, saving }) {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        onSave(form);
+        
+        let finalName = form.chore_name.trim();
+        if (isStrict) {
+            finalName += ' [STRICT]';
+        }
+        
+        onSave({ ...form, chore_name: finalName });
     };
 
     const dueDateOptions = form.frequency === 'weekly' ? DAYS : form.frequency === 'monthly' ? DATES : [];
@@ -92,17 +101,42 @@ function ChoreForm({ chore, profiles, onSave, onCancel, saving }) {
                     onChange={e => setForm(f => ({ ...f, chore_name: e.target.value }))}
                     className="w-full bg-black border border-slate-700 focus:border-cyan-400 p-2.5 text-white outline-none transition-colors"
                     placeholder="e.g. Vacuum Living Room" />
+                
+                {/* Strict Deadline Toggle */}
+                <div className="flex items-center gap-2 mt-2">
+                    <input 
+                        type="checkbox" 
+                        id="strict_toggle"
+                        checked={isStrict}
+                        onChange={(e) => setIsStrict(e.target.checked)}
+                        className="w-4 h-4 accent-cyan-500"
+                    />
+                    <label htmlFor="strict_toggle" className="text-[10px] text-slate-400 uppercase tracking-widest cursor-pointer hover:text-white transition-colors">
+                        Strict Deadline (Disappears if missed, -5 XP)
+                    </label>
+                </div>
             </div>
 
             {/* Assigned To */}
             <div>
                 <label className="block text-[10px] font-bold uppercase tracking-widest text-cyan-600 mb-1">Assigned To</label>
-                <select value={form.assigned_to}
-                    onChange={e => setForm(f => ({ ...f, assigned_to: e.target.value }))}
-                    className="w-full bg-black border border-slate-700 focus:border-cyan-400 p-2.5 text-white outline-none appearance-none">
-                    <option value="">— Select Profile —</option>
-                    {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+                <div className="flex flex-wrap gap-1.5">
+                    {profiles.map(p => {
+                        const isSelected = Array.isArray(form.assigned_to) 
+                            ? form.assigned_to.includes(p.id) 
+                            : form.assigned_to === p.id;
+                            
+                        return (
+                            <button key={p.id} type="button"
+                                onClick={() => toggleMulti('assigned_to', p.id)}
+                                className={`px-2 py-1 text-[10px] font-black uppercase border transition-colors ${isSelected
+                                    ? 'border-cyan-400 bg-cyan-400/10 text-cyan-400'
+                                    : 'border-slate-700 text-slate-500 hover:border-slate-500'}`}>
+                                {p.name}
+                            </button>
+                        );
+                    })}
+                </div>
             </div>
 
             {/* XP Reward */}
@@ -127,6 +161,15 @@ function ChoreForm({ chore, profiles, onSave, onCancel, saving }) {
                         </button>
                     ))}
                 </div>
+            </div>
+
+            {/* Rotation Period */}
+            <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-cyan-600 mb-1">Rotation Period (Days)</label>
+                <input type="number" min="1" value={form.rotation_period || 7}
+                    onChange={e => setForm(f => ({ ...f, rotation_period: parseInt(e.target.value) || 1 }))}
+                    className="w-full bg-black border border-slate-700 focus:border-cyan-400 p-2.5 text-white outline-none" />
+                <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-widest">How long a task remains assigned to a profile before rotating</p>
             </div>
 
             {/* Due Dates (weekly/monthly) */}
@@ -182,6 +225,63 @@ function ChoreForm({ chore, profiles, onSave, onCancel, saving }) {
     );
 }
 
+function ProfileManager({ profiles, adminRequest, onRefresh }) {
+    const [xpValues, setXpValues] = useState({});
+    const [savingId, setSavingId] = useState(null);
+
+    const handleAdjust = async (profile, isAdd) => {
+        const val = parseInt(xpValues[profile.id] || 0, 10);
+        if (isNaN(val) || val === 0) return;
+        setSavingId(profile.id);
+        const newBalance = isAdd ? profile.xp_balance + val : profile.xp_balance - val;
+        try {
+            await adminRequest(`/api/collections/profiles/records/${profile.id}`, 'PATCH', {
+                xp_balance: Math.max(0, newBalance)
+            });
+            onRefresh();
+            setXpValues(prev => ({ ...prev, [profile.id]: '' }));
+        } finally {
+            setSavingId(null);
+        }
+    };
+
+    return (
+        <div className="p-6 flex flex-col gap-4">
+            <h3 className="text-sm font-black uppercase tracking-widest text-cyan-400 mb-2">Adjust Profile XP</h3>
+            {profiles.map(p => (
+                <div key={p.id} className="border border-slate-800 p-4 transition-colors flex flex-col gap-3">
+                    <div className="flex justify-between items-center">
+                        <p className="font-black uppercase tracking-wider text-white text-sm">{p.name}</p>
+                        <p className="text-xs font-bold text-fuchsia-400 tracking-widest">{p.xp_balance} XP</p>
+                    </div>
+                    <div className="flex gap-2">
+                        <input 
+                            type="number" 
+                            min="1"
+                            placeholder="Amount..."
+                            value={xpValues[p.id] !== undefined ? xpValues[p.id] : ''}
+                            onChange={e => setXpValues(prev => ({ ...prev, [p.id]: e.target.value }))}
+                            className="w-24 bg-black border border-slate-700 focus:border-cyan-400 px-3 py-2 text-white text-xs outline-none transition-colors"
+                        />
+                        <button 
+                            disabled={savingId === p.id || !xpValues[p.id]}
+                            onClick={() => handleAdjust(p, false)}
+                            className="bg-rose-500/20 hover:bg-rose-500/40 text-rose-400 border border-rose-500/50 font-black uppercase tracking-widest px-4 py-2 text-xs transition-colors disabled:opacity-50">
+                            - Sub
+                        </button>
+                        <button 
+                            disabled={savingId === p.id || !xpValues[p.id]}
+                            onClick={() => handleAdjust(p, true)}
+                            className="flex-1 bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-400 border border-emerald-500/50 font-black uppercase tracking-widest px-4 py-2 text-xs transition-colors disabled:opacity-50">
+                            + Add
+                        </button>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
 export function AdminPanel({ isOpen, onClose }) {
     const { isAdmin, loading, error, login, logout, adminRequest } = useAdmin();
     const [chores, setChores] = useState([]);
@@ -189,6 +289,8 @@ export function AdminPanel({ isOpen, onClose }) {
     const [editingChore, setEditingChore] = useState(null); // null = list, {} = new, {id,...} = edit
     const [saving, setSaving] = useState(false);
     const [dataLoading, setDataLoading] = useState(false);
+    const [quickAddName, setQuickAddName] = useState('');
+    const [activeTab, setActiveTab] = useState('chores');
 
     useEffect(() => {
         if (isAdmin && isOpen) {
@@ -221,6 +323,7 @@ export function AdminPanel({ isOpen, onClose }) {
                 due_dates: form.due_dates,
                 round_robin_pool: form.round_robin_pool, // array of profile IDs
                 is_completed: form.is_completed || false,
+                rotation_period: form.rotation_period || 7,
             };
 
             if (form.id) {
@@ -230,6 +333,22 @@ export function AdminPanel({ isOpen, onClose }) {
             }
             await loadData();
             setEditingChore(null);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleQuickAdd = async (e) => {
+        e.preventDefault();
+        if (!quickAddName.trim()) return;
+        setSaving(true);
+        try {
+            await adminRequest('/api/collections/chores/records', 'POST', {
+                ...EMPTY_CHORE,
+                chore_name: quickAddName.trim()
+            });
+            setQuickAddName('');
+            await loadData();
         } finally {
             setSaving(false);
         }
@@ -272,7 +391,17 @@ export function AdminPanel({ isOpen, onClose }) {
                 <div className="flex-1 overflow-y-auto">
                     {!isAdmin ? (
                         <LoginForm onLogin={login} loading={loading} error={error} />
-                    ) : editingChore ? (
+                    ) : (
+                        <>
+                            {/* Tabs */}
+                            <div className="flex border-b border-slate-800">
+                                <button onClick={() => setActiveTab('chores')} className={`flex-1 py-3 text-xs font-black uppercase tracking-widest transition-colors ${activeTab === 'chores' ? 'text-cyan-400 border-b-2 border-cyan-400 bg-cyan-950/20' : 'text-slate-500 hover:text-slate-300'}`}>Chores</button>
+                                <button onClick={() => setActiveTab('profiles')} className={`flex-1 py-3 text-xs font-black uppercase tracking-widest transition-colors ${activeTab === 'profiles' ? 'text-cyan-400 border-b-2 border-cyan-400 bg-cyan-950/20' : 'text-slate-500 hover:text-slate-300'}`}>Profiles</button>
+                            </div>
+
+                            {activeTab === 'profiles' ? (
+                                <ProfileManager profiles={profiles} adminRequest={adminRequest} onRefresh={loadData} />
+                            ) : editingChore ? (
                         <div className="p-6">
                             <h3 className="text-sm font-black uppercase tracking-widest text-cyan-400 mb-4">
                                 {editingChore.id ? 'Edit Chore' : 'New Chore'}
@@ -287,10 +416,25 @@ export function AdminPanel({ isOpen, onClose }) {
                         </div>
                     ) : (
                         <div className="p-6 flex flex-col gap-4">
+                            {/* Quick Add */}
+                            <form onSubmit={handleQuickAdd} className="flex gap-2">
+                                <input 
+                                    type="text" 
+                                    value={quickAddName}
+                                    onChange={e => setQuickAddName(e.target.value)}
+                                    placeholder="Quick add chore..."
+                                    className="flex-1 bg-black border border-slate-700 focus:border-cyan-400 px-3 py-2 text-white text-sm outline-none transition-colors"
+                                />
+                                <button type="submit" disabled={saving || !quickAddName.trim()}
+                                    className="bg-cyan-500 hover:bg-cyan-400 text-black font-black uppercase tracking-widest px-4 py-2 text-xs transition-colors disabled:opacity-50">
+                                    Quick Add
+                                </button>
+                            </form>
+
                             {/* Add button */}
                             <button onClick={() => setEditingChore({ ...EMPTY_CHORE })}
-                                className="flex items-center justify-center gap-2 border-2 border-dashed border-cyan-800 hover:border-cyan-400 text-cyan-600 hover:text-cyan-400 font-black uppercase tracking-widest py-3 text-sm transition-colors">
-                                <Plus size={16} /> Add New Chore
+                                className="flex items-center justify-center gap-2 border-2 border-dashed border-cyan-800 hover:border-cyan-400 text-cyan-600 hover:text-cyan-400 font-black uppercase tracking-widest py-3 text-sm transition-colors mt-2">
+                                <Plus size={16} /> Advanced Add
                             </button>
 
                             {/* Chore list */}
@@ -309,7 +453,10 @@ export function AdminPanel({ isOpen, onClose }) {
                                                 <p className="font-black uppercase tracking-wider text-white text-sm truncate">{chore.chore_name}</p>
                                                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                                                     <span className="text-[10px] text-slate-500 uppercase tracking-wider">
-                                                        {chore.expand?.assigned_to?.name || chore.assigned_to || '—'}
+                                                        {Array.isArray(chore.expand?.assigned_to)
+                                                            ? chore.expand.assigned_to.map(p => p.name).join(', ')
+                                                            : chore.expand?.assigned_to?.name || 
+                                                              (Array.isArray(chore.assigned_to) ? chore.assigned_to.join(', ') : chore.assigned_to) || '—'}
                                                     </span>
                                                     <span className="text-[10px] text-cyan-700 uppercase">{chore.frequency}</span>
                                                     <span className="text-[10px] text-fuchsia-700">+{chore.xp_reward} XP</span>
@@ -334,6 +481,8 @@ export function AdminPanel({ isOpen, onClose }) {
                                 ))
                             )}
                         </div>
+                    )}
+                    </>
                     )}
                 </div>
             </div>

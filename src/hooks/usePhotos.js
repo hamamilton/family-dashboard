@@ -1,89 +1,55 @@
-import { useState, useEffect } from 'react';
-
-const DB_NAME = 'FamilyDashboardPhotosDB';
-const STORE_NAME = 'photos';
-
-const openDB = () => {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, 1);
-        request.onupgradeneeded = (e) => {
-            const db = e.target.result;
-            if (!db.objectStoreNames.contains(STORE_NAME)) {
-                db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-            }
-        };
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-    });
-};
+import { useState, useEffect, useCallback } from 'react';
+import { pb } from '../lib/pocketbase';
 
 export function usePhotos() {
     const [photos, setPhotos] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        loadPhotos();
+    const loadPhotos = useCallback(async () => {
+        try {
+            const records = await pb.collection('photos').getFullList({ sort: '-created' });
+            const formatted = records.map(record => ({
+                id: record.id,
+                dataUrl: pb.files.getURL(record, record.image),
+                timestamp: new Date(record.created).getTime(),
+                record: record
+            }));
+            setPhotos(formatted);
+        } catch (error) {
+            if (!error.isAbort) {
+                console.error("Failed to load photos from PocketBase", error);
+            }
+        } finally {
+            setLoading(false);
+        }
     }, []);
 
-    const loadPhotos = async () => {
+    useEffect(() => {
+        loadPhotos();
+        
+        pb.collection('photos').subscribe('*', loadPhotos);
+        return () => {
+            pb.collection('photos').unsubscribe();
+        };
+    }, [loadPhotos]);
+
+    const addPhoto = async (file) => {
+        const formData = new FormData();
+        formData.append('image', file);
+        
         try {
-            const db = await openDB();
-            const transaction = db.transaction(STORE_NAME, 'readonly');
-            const store = transaction.objectStore(STORE_NAME);
-            const request = store.getAll();
-            
-            request.onsuccess = () => {
-                // Sort by timestamp descending so newest are first
-                const sorted = request.result.sort((a, b) => b.timestamp - a.timestamp);
-                setPhotos(sorted);
-                setLoading(false);
-            };
+            const record = await pb.collection('photos').create(formData);
+            return record;
         } catch (error) {
-            console.error("Failed to load photos from IndexedDB", error);
-            setLoading(false);
+            console.error("Failed to add photo", error);
+            throw error;
         }
     };
 
-    const addPhoto = async (file) => {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = async () => {
-                const newPhoto = {
-                    id: Date.now().toString(),
-                    dataUrl: reader.result,
-                    timestamp: Date.now()
-                };
-
-                try {
-                    const db = await openDB();
-                    const transaction = db.transaction(STORE_NAME, 'readwrite');
-                    const store = transaction.objectStore(STORE_NAME);
-                    store.add(newPhoto);
-
-                    transaction.oncomplete = () => {
-                        setPhotos(prev => [newPhoto, ...prev]);
-                        resolve(newPhoto);
-                    };
-                } catch (error) {
-                    console.error("Failed to add photo", error);
-                    reject(error);
-                }
-            };
-            reader.onerror = error => reject(error);
-        });
-    };
-
     const deletePhoto = async (id) => {
+        // The id passed in is the PocketBase record id now
         try {
-            const db = await openDB();
-            const transaction = db.transaction(STORE_NAME, 'readwrite');
-            const store = transaction.objectStore(STORE_NAME);
-            store.delete(id);
-
-            transaction.oncomplete = () => {
-                setPhotos(prev => prev.filter(p => p.id !== id));
-            };
+            await pb.collection('photos').delete(id);
         } catch (error) {
             console.error("Failed to delete photo", error);
         }

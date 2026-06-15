@@ -1,11 +1,11 @@
 import { CheckSquare, Square, AlertCircle } from 'lucide-react';
-import { getDaysLate } from '../../hooks/useChores';
+import { isChoreOverdue } from '../../hooks/useChores';
 
 export function ChoreCard({ chore, onToggle }) {
     return (
         <button
             onClick={() => { if (!chore.is_future) onToggle(chore.id, chore.is_completed) }}
-            className={`group relative p-6 border-2 text-left transition-all duration-300 w-full uppercase font-mono ${
+            className={`chore-card group relative p-6 border-2 text-left transition-all duration-300 w-full uppercase font-mono ${
                 chore.is_completed
                     ? 'border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/20 opacity-60 scale-95'
                     : chore.is_future
@@ -19,7 +19,12 @@ export function ChoreCard({ chore, onToggle }) {
                 <div>
                     <h3 className={`text-2xl font-black mb-2 leading-none tracking-widest ${chore.is_completed ? 'line-through text-emerald-700 dark:text-emerald-700' : 'text-slate-800 dark:text-white drop-shadow-sm dark:drop-shadow-[0_0_5px_rgba(255,255,255,0.5)]'
                         }`}>
-                        {chore.chore_name}
+                        {chore.chore_name.replace('[STRICT]', '').trim()}
+                        {chore.chore_name.includes('[STRICT]') && (
+                            <span className="ml-3 inline-block align-top text-[10px] bg-rose-500/10 text-rose-500 dark:text-rose-400 border border-rose-500/50 px-1.5 py-0.5 rounded-sm uppercase tracking-widest shadow-sm">
+                                Strict
+                            </span>
+                        )}
                     </h3>
                     <div className="flex justify-between items-center mt-2">
                         <p className={`text-sm tracking-[0.2em] font-bold ${chore.is_completed ? 'text-emerald-700 dark:text-emerald-900' : 'text-fuchsia-600 dark:text-fuchsia-500'
@@ -28,10 +33,10 @@ export function ChoreCard({ chore, onToggle }) {
                             {chore.assigned_to || 'UNASSIGNED'}
                         </p>
                         
-                        {!chore.is_completed && getDaysLate(chore) > 0 && (
+                        {!chore.is_completed && !chore.is_future && isChoreOverdue(chore) && (
                             <div className="flex items-center gap-1 text-[10px] bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400 px-2 py-1 font-bold tracking-widest border border-red-300 dark:border-red-800 animate-pulse">
                                 <AlertCircle size={12} />
-                                -{getDaysLate(chore) * 15}% XP
+                                OVERDUE
                             </div>
                         )}
                     </div>

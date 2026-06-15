@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { pb } from '../lib/pocketbase';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -28,8 +28,13 @@ export function useMeals() {
     const [meals, setMeals] = useState(loadLocalMeals());
     const [cookedHistory, setCookedHistory] = useState([]);
     const [loading, setLoading] = useState(false);
+    
+    const lastTyped = useRef(0);
+    const updateTimeouts = useRef({});
 
     const fetchMeals = useCallback(async () => {
+        // If we typed in the last 2 seconds, ignore incoming server syncs to avoid jumping cursors.
+        if (Date.now() - lastTyped.current < 2000) return;
         try {
             const records = await pb.collection('meals').getFullList();
             
@@ -76,6 +81,8 @@ export function useMeals() {
     }, [fetchMeals, fetchHistory]);
 
     const updateMeal = async (day, field, value) => {
+        lastTyped.current = Date.now();
+        
         const existingMeal = meals.find(m => m.day === day);
         if (!existingMeal) return;
 
@@ -87,21 +94,31 @@ export function useMeals() {
             return next;
         });
 
-        try {
-            if (existingMeal.id && !existingMeal.id.startsWith('temp-') && !existingMeal.id.startsWith('mock-')) {
-                await pb.collection('meals').update(existingMeal.id, { [field]: value });
-            } else {
-                // If the record doesn't exist yet on PB, we create it
-                const record = await pb.collection('meals').create({ 
-                    day, 
-                    main_dish: updatedMeal.main_dish, 
-                    side_dish: updatedMeal.side_dish 
-                });
-                setMeals(prev => prev.map(m => m.day === day ? record : m));
-            }
-        } catch (err) {
-            console.warn("Could not save meal to Pocketbase.", err);
+        if (updateTimeouts.current[day]) {
+            clearTimeout(updateTimeouts.current[day]);
         }
+
+        updateTimeouts.current[day] = setTimeout(async () => {
+            try {
+                if (existingMeal.id && !existingMeal.id.startsWith('temp-') && !existingMeal.id.startsWith('mock-')) {
+                    await pb.collection('meals').update(existingMeal.id, { [field]: value }, { requestKey: null });
+                } else {
+                    // Create the record
+                    const record = await pb.collection('meals').create({ 
+                        day, 
+                        main_dish: updatedMeal.main_dish, 
+                        side_dish: updatedMeal.side_dish 
+                    }, { requestKey: null });
+                    
+                    // Safely inject the new real ID into the local state without destroying whatever the user just typed!
+                    setMeals(prev => prev.map(m => m.day === day ? { ...m, id: record.id } : m));
+                }
+            } catch (err) {
+                if (!err.isAbort) {
+                    console.warn("Could not save meal to Pocketbase.", err);
+                }
+            }
+        }, 500);
     };
 
     const addToHistory = async (meal) => {

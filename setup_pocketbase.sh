@@ -118,6 +118,30 @@ create_collection "groceries" '{
     {"name": "name",       "type": "text", "required": true,  "options": {"min": null, "max": null, "pattern": ""}},
     {"name": "is_checked", "type": "bool", "required": false, "options": {}}
   ]
+}
+'
+
+# ── PHOTOS ────────────────────────────────────────────────────────────────────
+create_collection "photos" '{
+  "name": "photos",
+  "type": "base",
+  "listRule": "",
+  "viewRule": "",
+  "createRule": "",
+  "updateRule": "",
+  "deleteRule": "",
+  "schema": [
+    {
+      "name": "photo",
+      "type": "file",
+      "required": true,
+      "options": {
+        "maxSelect": 1,
+        "maxSize": 10485760,
+        "mimeTypes": ["image/jpeg", "image/png", "image/svg+xml", "image/gif", "image/webp"]
+      }
+    }
+  ]
 }'
 
 echo ""

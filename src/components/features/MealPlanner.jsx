@@ -82,14 +82,14 @@ export function MealPlanner() {
                                     value={meal.main_dish || ''}
                                     onChange={(e) => updateMeal(meal.day, 'main_dish', e.target.value)}
                                     placeholder="MAIN DISH"
-                                    className="w-full bg-transparent text-sm font-bold tracking-wider uppercase text-slate-800 dark:text-emerald-100 focus:outline-none placeholder:text-slate-300 dark:placeholder:text-emerald-900/40"
+                                    className="w-full bg-transparent text-sm font-bold tracking-wider uppercase text-slate-800 dark:text-white focus:outline-none placeholder:text-slate-300 dark:placeholder:text-slate-600"
                                 />
                                 <input
                                     type="text"
                                     value={meal.side_dish || ''}
                                     onChange={(e) => updateMeal(meal.day, 'side_dish', e.target.value)}
                                     placeholder="SIDE DISH / NOTES"
-                                    className="w-full bg-transparent text-xs font-bold tracking-wider uppercase text-slate-500 dark:text-emerald-600 focus:outline-none placeholder:text-slate-200 dark:placeholder:text-emerald-900/30"
+                                    className="w-full bg-transparent text-xs font-bold tracking-wider uppercase text-slate-500 dark:text-slate-400 focus:outline-none placeholder:text-slate-200 dark:placeholder:text-slate-700"
                                 />
                             </div>
                             {meal.main_dish && (

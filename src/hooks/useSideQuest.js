@@ -14,9 +14,46 @@ const QUEST_POOL = [
     "🍎 Wipe down the fruit bowl and counters"
 ];
 
+function getSpawnTime(dateString) {
+    let hash = 0;
+    for (let i = 0; i < dateString.length; i++) {
+        hash = ((hash << 5) - hash) + dateString.charCodeAt(i);
+        hash |= 0;
+    }
+    const minutesPast7 = Math.abs(hash) % (12 * 60); // 12 hours * 60 mins
+    return { 
+        spawnHour: 7 + Math.floor(minutesPast7 / 60), 
+        spawnMinute: minutesPast7 % 60 
+    };
+}
+
 export function useSideQuest(profiles = []) {
-    const [quest, setQuest] = useState(null);
+    const [rawQuest, setRawQuest] = useState(null);
+    const [isVisible, setIsVisible] = useState(false);
     const [loading, setLoading] = useState(true);
+
+    const checkVisibility = useCallback((q) => {
+        if (!q) {
+            setIsVisible(false);
+            return;
+        }
+        if (q.is_completed) {
+            setIsVisible(true);
+            return;
+        }
+        const now = new Date();
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+        const { spawnHour, spawnMinute } = getSpawnTime(q.date);
+
+        if (currentHour >= 19) {
+            setIsVisible(false); // Disappears at 7 PM
+        } else if (currentHour > spawnHour || (currentHour === spawnHour && currentMinute >= spawnMinute)) {
+            setIsVisible(true); // Spawned
+        } else {
+            setIsVisible(false); // Hasn't spawned yet
+        }
+    }, []);
 
     const fetchData = useCallback(async () => {
         try {
@@ -28,24 +65,26 @@ export function useSideQuest(profiles = []) {
                 expand: 'completed_by'
             });
 
+            let newRawQuest = null;
             if (records.items.length > 0) {
-                setQuest(records.items[0]);
+                newRawQuest = records.items[0];
             } else {
                 // 2. Create a new surprise quest for today
                 const randomQuest = QUEST_POOL[Math.floor(Math.random() * QUEST_POOL.length)];
-                const newQuest = await pb.collection('side_quests').create({
+                newRawQuest = await pb.collection('side_quests').create({
                     title: randomQuest,
                     date: today,
                     is_completed: false
                 });
-                setQuest(newQuest);
             }
+            setRawQuest(newRawQuest);
+            checkVisibility(newRawQuest);
             setLoading(false);
         } catch (err) {
             console.error("SideQuest sync failed:", err);
             setLoading(false);
         }
-    }, []);
+    }, [checkVisibility]);
 
     useEffect(() => {
         fetchData();
@@ -53,12 +92,19 @@ export function useSideQuest(profiles = []) {
         return () => pb.collection('side_quests').unsubscribe('*');
     }, [fetchData]);
 
+    useEffect(() => {
+        const interval = setInterval(() => {
+            checkVisibility(rawQuest);
+        }, 60000); // Check every minute
+        return () => clearInterval(interval);
+    }, [rawQuest, checkVisibility]);
+
     const claimQuest = async (profileId) => {
-        if (!quest || quest.is_completed) return;
+        if (!rawQuest || rawQuest.is_completed) return;
 
         try {
             // 1. Mark quest as completed
-            await pb.collection('side_quests').update(quest.id, {
+            await pb.collection('side_quests').update(rawQuest.id, {
                 is_completed: true,
                 completed_by: profileId
             });
@@ -75,5 +121,5 @@ export function useSideQuest(profiles = []) {
         }
     };
 
-    return { quest, loading, claimQuest };
+    return { quest: isVisible ? rawQuest : null, loading, claimQuest };
 }
