@@ -3,6 +3,13 @@ import { pb } from '../lib/pocketbase';
 
 const dayMap = { "Sunday": 0, "Monday": 1, "Tuesday": 2, "Wednesday": 3, "Thursday": 4, "Friday": 5, "Saturday": 6 };
 
+export function getLocalYYYYMMDD(dateObj) {
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 export function getDaysLate(chore) {
     if (!chore.frequency || chore.frequency === 'daily' || !chore.due_dates) return 0;
     
@@ -104,9 +111,28 @@ export function shouldPenalize(chore) {
     return false;
 }
 
+export function isMultiDay(event) {
+    if (event.title === '[ICAL_SUBSCRIPTION]') return false;
+    try {
+        if (event.color && event.color.startsWith('{')) {
+            const meta = JSON.parse(event.color);
+            if (meta.seriesId) return false;
+        }
+    } catch(e) {}
+
+    const start = new Date(event.start || event.date);
+    const end = new Date(event.end);
+    if (!end || isNaN(end.getTime()) || !start || isNaN(start.getTime())) return false;
+    
+    const startStr = getLocalYYYYMMDD(start);
+    const endStr = getLocalYYYYMMDD(end);
+    return startStr !== endStr;
+}
+
 export function useChores(groupBy) {
     const [chores, setChores] = useState([]);
     const [profiles, setProfiles] = useState([]);
+    const [rawEvents, setRawEvents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [todayHoliday, setTodayHoliday] = useState(null);
     const [birthdayProfiles, setBirthdayProfiles] = useState([]);
@@ -115,18 +141,21 @@ export function useChores(groupBy) {
     const fetchData = useCallback(async () => {
         setFetchError(null);
         try {
-            const [rawChoreList, profileList] = await Promise.all([
+            const [rawChoreList, profileList, eventList] = await Promise.all([
                 pb.collection('chores').getFullList({ sort: '-created' }),
-                pb.collection('profiles').getFullList()
+                pb.collection('profiles').getFullList(),
+                pb.collection('events').getFullList()
             ]);
+            
+            setRawEvents(eventList);
 
             const now = new Date();
-            const todayStr = now.toISOString().split('T')[0];
+            const todayStr = getLocalYYYYMMDD(now);
 
             // 1. Reset Recurring Chores
             const choresToReset = rawChoreList.filter(c => {
                 if (!c.is_completed || !c.frequency || c.frequency === 'none') return false;
-                const updatedStr = new Date(c.updated).toISOString().split('T')[0];
+                const updatedStr = getLocalYYYYMMDD(new Date(c.updated));
                 if (updatedStr === todayStr) return false; // Don't reset if just checked off today
 
                 if (c.frequency === 'daily') return true;
@@ -165,23 +194,13 @@ export function useChores(groupBy) {
                             const profile = profileList.find(p => p.id === val.trim() || p.name === val.trim());
                             return profile ? profile.id : val.trim();
                         }).filter(Boolean);
-                    } else {
-                        const currentAssigned = Array.isArray(c.assigned_to) ? c.assigned_to : (c.assigned_to ? [c.assigned_to] : []);
-                        pool = currentAssigned.map(val => {
-                            const profile = profileList.find(p => p.id === val || p.name === val);
-                            return profile ? profile.id : val;
-                        }).filter(Boolean);
                     }
                     
-                    if (pool.length > 0) {
-                        if (pool.length > 1) {
-                            const currentAssignedId = Array.isArray(c.assigned_to) ? c.assigned_to[0] : c.assigned_to;
-                            const currentIdx = pool.indexOf(currentAssignedId);
-                            const nextIdx = currentIdx === -1 ? 0 : (currentIdx + 1) % pool.length;
-                            updateData.assigned_to = pool[nextIdx];
-                        } else if (pool.length === 1) {
-                            updateData.assigned_to = pool[0];
-                        }
+                    if (pool.length > 1) {
+                        const currentAssignedId = Array.isArray(c.assigned_to) ? c.assigned_to[0] : c.assigned_to;
+                        const currentIdx = pool.indexOf(currentAssignedId);
+                        const nextIdx = currentIdx === -1 ? 0 : (currentIdx + 1) % pool.length;
+                        updateData.assigned_to = pool[nextIdx];
                     }
 
                     return pb.collection('chores').update(c.id, updateData);
@@ -194,7 +213,7 @@ export function useChores(groupBy) {
             const choresToPenalize = rawChoreList.filter(c => {
                 if (!shouldPenalize(c)) return false;
                 
-                const updatedStr = new Date(c.updated).toISOString().split('T')[0];
+                const updatedStr = getLocalYYYYMMDD(new Date(c.updated));
                 if (updatedStr === todayStr) return false; // Already penalized/touched today
                 
                 return true;
@@ -260,7 +279,7 @@ export function useChores(groupBy) {
             // 2. Filter Visibility
             const visibleChores = rawChoreList.filter(c => {
                 if (!c.is_completed) return true; 
-                const updatedStr = new Date(c.updated).toISOString().split('T')[0];
+                const updatedStr = getLocalYYYYMMDD(new Date(c.updated));
                 if (updatedStr === todayStr) return true; 
                 
                 if (c.frequency === 'monthly' || c.frequency === 'weekly') return false;
@@ -276,7 +295,6 @@ export function useChores(groupBy) {
                 const res = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/US`);
                 if (res.ok) {
                     const holidays = await res.json();
-                    const todayStr = new Date().toISOString().split('T')[0];
                     const holiday = holidays.find(h => h.date === todayStr);
                     setTodayHoliday(holiday ? holiday.name : null);
                 }
@@ -285,7 +303,7 @@ export function useChores(groupBy) {
             }
 
             // Check Birthdays
-            const todayMMDD = new Date().toISOString().split('T')[0].substring(5); // "MM-DD"
+            const todayMMDD = todayStr.substring(5); // "MM-DD"
             const bdays = profileList.filter(p => p.birthday === todayMMDD);
             setBirthdayProfiles(bdays.map(p => p.name));
         } catch (err) {
@@ -299,7 +317,7 @@ export function useChores(groupBy) {
         }
     }, []);
 
-    const toggleChore = async (choreId, currentStatus) => {
+    const toggleChore = async (choreId, currentStatus, isCovered = false) => {
         const chore = chores.find(c => c.id === choreId);
         const assignedIds = Array.isArray(chore.assigned_to) ? chore.assigned_to : [chore.assigned_to];
         const assignedProfiles = assignedIds.map(id => profiles.find(p => p.name === id || p.id === id)).filter(Boolean);
@@ -313,7 +331,7 @@ export function useChores(groupBy) {
             await pb.collection('chores').update(choreId, { is_completed: newStatus });
 
             // 2. Only try to update XP if a profile exists and we are CHECKING the box
-            if (assignedProfiles.length > 0 && newStatus) {
+            if (assignedProfiles.length > 0 && newStatus && !isCovered) {
                 const baseXP = chore.xp_reward || 10;
 
                 await Promise.all(assignedProfiles.map(async (profile) => {
@@ -333,6 +351,38 @@ export function useChores(groupBy) {
             // Revert optimistic update on failure
             setChores(prev => prev.map(c => c.id === choreId ? { ...c, is_completed: currentStatus } : c));
             console.error("Update failed:", err);
+        }
+    };
+
+    const rotateAssignee = async (choreId) => {
+        const chore = chores.find(c => c.id === choreId);
+        if (!chore) return;
+        
+        let pool = [];
+        if (Array.isArray(chore.round_robin_pool) && chore.round_robin_pool.length > 0) {
+            pool = chore.round_robin_pool.map(val => {
+                const profile = profiles.find(p => p.id === val || p.name === val);
+                return profile ? profile.id : val;
+            }).filter(Boolean);
+        } else if (typeof chore.round_robin_pool === 'string' && chore.round_robin_pool.trim() !== '') {
+            pool = chore.round_robin_pool.split(',').map(val => {
+                const profile = profiles.find(p => p.id === val.trim() || p.name === val.trim());
+                return profile ? profile.id : val.trim();
+            }).filter(Boolean);
+        }
+        
+        if (pool.length > 1) {
+            const currentAssignedId = Array.isArray(chore.assigned_to) ? chore.assigned_to[0] : chore.assigned_to;
+            const currentIdx = pool.indexOf(currentAssignedId);
+            const nextIdx = currentIdx === -1 ? 0 : (currentIdx + 1) % pool.length;
+            const nextAssigneeId = pool[nextIdx];
+            
+            try {
+                await pb.collection('chores').update(choreId, { assigned_to: nextAssigneeId });
+                fetchData(); // reload correctly to compute projections
+            } catch (err) {
+                console.error("Rotate failed:", err);
+            }
         }
     };
 
@@ -375,13 +425,6 @@ export function useChores(groupBy) {
                     const p = profiles.find(p => p.id === val.trim() || p.name === val.trim());
                     return p ? p.name : val.trim();
                 }).filter(Boolean);
-            } else {
-                const currentAssigned = Array.isArray(c.assigned_to) ? c.assigned_to : (c.assigned_to ? [c.assigned_to] : []);
-                pool = currentAssigned.map(val => {
-                    const p = profiles.find(p => p.id === val || p.name === val);
-                    return p ? p.name : val;
-                }).filter(Boolean);
-                if (pool.length === 0) pool = profiles.filter(p => !p.is_parent).map(p => p.name);
             }
 
             const firstAssigned = Array.isArray(c.assigned_to) ? c.assigned_to[0] : c.assigned_to;
@@ -398,10 +441,17 @@ export function useChores(groupBy) {
 
             let assignmentCounter = 0;
             const overdue = isChoreOverdue(c);
+            
+            const parents = profiles.filter(p => p.is_parent);
+            const parentName = parents.length > 0 ? parents[0].name : 'Mom/Dad';
 
             for (let i = 0; i < 7; i++) {
                 const targetDayIdx = (todayIdx + i) % 7;
                 const targetDayName = days[targetDayIdx];
+                
+                const targetDate = new Date();
+                targetDate.setDate(targetDate.getDate() + i);
+                targetDate.setHours(0,0,0,0);
                 
                 if (c.frequency === 'weekly' && !dueDays.includes(targetDayName)) {
                     // Force overdue tasks to appear Today so they can be completed
@@ -416,9 +466,41 @@ export function useChores(groupBy) {
                     ? pool[(currentIdx + assignmentCounter) % pool.length] 
                     : resolvedName;
                 
-                // For day 0, always use the exact resolvedName (handles multiple assignees correctly)
-                const finalAssignee = (i === 0 && (!Array.isArray(c.round_robin_pool) || c.round_robin_pool.length === 0)) ? resolvedName : projectedName;
+                let finalAssignee = pool.length > 0 ? projectedName : resolvedName;
                 
+                // Multi-day Event Overrides
+                let assigneesList = finalAssignee.split(',').map(s => s.trim());
+                let newAssigneesList = [...assigneesList];
+                let isCovered = false;
+
+                for (let aIdx = 0; aIdx < assigneesList.length; aIdx++) {
+                    const person = assigneesList[aIdx];
+                    
+                    const isBusy = rawEvents.some(e => {
+                        if (!isMultiDay(e)) return false;
+                        
+                        const eventAssigneeStr = e.assignee || e.assigned_to || '';
+                        const eAssignees = Array.isArray(eventAssigneeStr) ? eventAssigneeStr : eventAssigneeStr.split(',').map(s=>s.trim());
+                        if (!eAssignees.includes(person) && !eAssignees.includes('Everyone')) return false;
+
+                        const eStart = new Date(e.start || e.date);
+                        eStart.setHours(0,0,0,0);
+                        const eEnd = new Date(e.end);
+                        eEnd.setHours(23,59,59,999);
+                        
+                        return targetDate >= eStart && targetDate <= eEnd;
+                    });
+
+                    if (isBusy && !parents.some(p => p.name === person)) {
+                        newAssigneesList[aIdx] = `${person} (Covered by Parents)`;
+                        isCovered = true;
+                    }
+                }
+
+                if (isCovered) {
+                    finalAssignee = newAssigneesList.join(', ');
+                }
+
                 const displayDay = i === 0 ? `Today (${targetDayName})` : targetDayName;
 
                 projected.push({
@@ -462,5 +544,5 @@ export function useChores(groupBy) {
         return orderA - orderB;
     });
 
-    return { chores, profiles, sortedGroupEntries, loading, toggleChore, todayHoliday, birthdayProfiles, fetchError };
+    return { chores, profiles, sortedGroupEntries, loading, toggleChore, rotateAssignee, todayHoliday, birthdayProfiles, fetchError };
 }

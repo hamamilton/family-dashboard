@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Calendar as CalendarIcon, Clock, Loader2, X, GripHorizontal } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Calendar as CalendarIcon, Clock, Loader2, X, GripHorizontal, MapPin, Camera, CalendarDays } from 'lucide-react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import format from 'date-fns/format';
 import parse from 'date-fns/parse';
@@ -10,6 +10,9 @@ import 'react-big-calendar/lib/css/react-big-calendar.css';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { useCalendar, getEventMetadata } from '../../hooks/useCalendar';
+import { LocationAutocomplete } from '../features/LocationAutocomplete';
+import { SubscriptionsModal } from '../features/SubscriptionsModal';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const locales = {
   'en-US': enUS,
@@ -28,36 +31,53 @@ const EventComponent = ({ event, profiles }) => {
     const PROFILE_COLORS = ['bg-cyan-500', 'bg-fuchsia-500', 'bg-emerald-500', 'bg-violet-500', 'bg-rose-500', 'bg-blue-500'];
     let colorClass = 'bg-slate-500';
     
-    if (event.assigned_to === 'Everyone') {
+    const assignees = Array.isArray(event.assigned_to) 
+        ? event.assigned_to 
+        : (event.assigned_to || 'Everyone').split(',').map(s => s.trim());
+
+    if (assignees.includes('Everyone') || assignees.length > 1) {
         colorClass = 'bg-amber-500';
     } else if (profiles && profiles.length > 0) {
-        const profileIndex = profiles.findIndex(p => p.name === event.assigned_to);
+        const profileIndex = profiles.findIndex(p => p.name === assignees[0]);
         if (profileIndex !== -1) {
             colorClass = PROFILE_COLORS[profileIndex % PROFILE_COLORS.length];
         }
     }
 
+    const meta = getEventMetadata(event);
+    const location = meta?.location || '';
+
     return (
-        <div className={`p-1 text-xs font-black truncate rounded-sm ${colorClass} text-white shadow-sm h-full`}>
-            {event.title}
+        <div className={`p-1 text-xs font-black truncate rounded-sm ${colorClass} text-white shadow-sm h-full flex flex-col justify-between`}>
+            <span className="truncate">{event.title}</span>
+            {location && (
+                <div className="flex items-center gap-1 mt-0.5 opacity-80">
+                    <MapPin size={10} className="flex-shrink-0" />
+                    <span className="text-[9px] truncate tracking-wider">{location.split(',')[0]}</span>
+                </div>
+            )}
         </div>
     );
 };
 
 export function CalendarView({ profiles = [] }) {
-    const { events, loading, addEvent, addEvents, deleteEvent, updateEvent } = useCalendar();
+    const { events, subscriptions, loading, addEvent, addEvents, deleteEvent, updateEvent, addSubscription, removeSubscription } = useCalendar();
     
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isSubModalOpen, setIsSubModalOpen] = useState(false);
+    const [isScanning, setIsScanning] = useState(false);
+    const fileInputRef = useRef(null);
     const [newEventData, setNewEventData] = useState({
         id: null,
         title: '',
         start: new Date(),
         end: new Date(),
-        assigned_to: 'Everyone',
+        assigned_to: ['Everyone'],
         isRecurring: false,
         seriesId: null,
         recurUntil: null,
-        selectedDays: []
+        selectedDays: [],
+        location: ''
     });
     const [view, setView] = useState('month');
     const [date, setDate] = useState(new Date());
@@ -68,11 +88,12 @@ export function CalendarView({ profiles = [] }) {
             title: '',
             start: slotInfo.start,
             end: slotInfo.end,
-            assigned_to: 'Everyone',
+            assigned_to: ['Everyone'],
             isRecurring: false,
             seriesId: null,
             recurUntil: null,
-            selectedDays: []
+            selectedDays: [],
+            location: ''
         });
         setIsModalOpen(true);
     };
@@ -86,13 +107,111 @@ export function CalendarView({ profiles = [] }) {
             title: event.title,
             start: event.start,
             end: event.end,
-            assigned_to: event.assigned_to,
+            assigned_to: Array.isArray(event.assigned_to) 
+                ? event.assigned_to 
+                : (event.assigned_to || 'Everyone').split(',').map(s => s.trim()),
             isRecurring,
             seriesId: meta?.seriesId || null,
             recurUntil: meta?.recurUntil ? new Date(meta.recurUntil) : null,
-            selectedDays: meta?.selectedDays || []
+            selectedDays: meta?.selectedDays || [],
+            location: meta?.location || ''
         });
         setIsModalOpen(true);
+    };
+
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        try {
+            setIsScanning(true);
+            e.target.value = null; // Reset file input
+
+            const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+            if (!apiKey) {
+                alert('VITE_GEMINI_API_KEY is not set in your environment variables. Please add it to use the AI Scanner.');
+                setIsScanning(false);
+                return;
+            }
+
+            const genAI = new GoogleGenerativeAI(apiKey);
+            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = async () => {
+                try {
+                    const base64Data = reader.result.split(',')[1];
+                    const imagePart = { inlineData: { data: base64Data, mimeType: file.type } };
+
+                    const prompt = `
+                        You are an expert event calendar assistant. 
+                        Extract the event details from this flyer. 
+                        Return ONLY a JSON object with the following keys:
+                        - title: string
+                        - start_date: string (YYYY-MM-DD)
+                        - end_date: string (YYYY-MM-DD)
+                        - start_time: string (HH:MM in 24hr format, e.g. 14:30)
+                        - end_time: string (HH:MM in 24hr format)
+                        - description: string
+                        
+                        If any of these are missing, guess to the best of your ability or return an empty string. If no end time is specified, make it 1 hour after start time.
+                        Ensure the output is strictly valid JSON without markdown blocks.
+                    `;
+
+                    const result = await model.generateContent([prompt, imagePart]);
+                    let responseText = result.response.text();
+                    responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+                    
+                    const data = JSON.parse(responseText);
+
+                    let start = new Date();
+                    let end = new Date();
+                    
+                    if (data.start_date) {
+                        const [y, m, d] = data.start_date.split('-');
+                        start = new Date(y, m - 1, d);
+                        end = new Date(y, m - 1, d);
+                    }
+                    if (data.start_time) {
+                        const [h, min] = data.start_time.split(':');
+                        start.setHours(h, min, 0, 0);
+                    }
+                    if (data.end_date) {
+                        const [y, m, d] = data.end_date.split('-');
+                        end = new Date(y, m - 1, d);
+                    }
+                    if (data.end_time) {
+                        const [h, min] = data.end_time.split(':');
+                        end.setHours(h, min, 0, 0);
+                    } else {
+                        end = new Date(start.getTime() + 3600000);
+                    }
+
+                    setNewEventData({
+                        id: null,
+                        title: data.title || 'Scanned Event',
+                        start: start,
+                        end: end,
+                        assigned_to: ['Everyone'],
+                        isRecurring: false,
+                        seriesId: null,
+                        recurUntil: null,
+                        selectedDays: [],
+                        location: data.description || ''
+                    });
+                    setIsModalOpen(true);
+                } catch(err) {
+                    console.error(err);
+                    alert('Failed to parse flyer: ' + err.message);
+                } finally {
+                    setIsScanning(false);
+                }
+            };
+        } catch(err) {
+            console.error(err);
+            setIsScanning(false);
+        }
     };
 
     const handleDelete = async () => {
@@ -112,18 +231,29 @@ export function CalendarView({ profiles = [] }) {
         e.preventDefault();
         
         const isEditingSeries = newEventData.id && newEventData.isRecurring;
-        const colorData = newEventData.isRecurring ? JSON.stringify({
-            seriesId: newEventData.seriesId || `series-${Date.now()}`,
-            recurUntil: newEventData.recurUntil,
-            selectedDays: newEventData.selectedDays
-        }) : '';
+        
+        let colorObj = {};
+        if (newEventData.isRecurring) {
+            colorObj = {
+                seriesId: newEventData.seriesId || `series-${Date.now()}`,
+                recurUntil: newEventData.recurUntil,
+                selectedDays: newEventData.selectedDays
+            };
+        }
+        if (newEventData.location) {
+            colorObj.location = newEventData.location;
+        }
+        
+        const colorData = Object.keys(colorObj).length > 0 ? JSON.stringify(colorObj) : '';
+
+        const assignedToJoined = Array.isArray(newEventData.assigned_to) ? newEventData.assigned_to.join(', ') : newEventData.assigned_to;
 
         if (newEventData.id && !isEditingSeries) {
             updateEvent(newEventData.id, {
                 title: newEventData.title,
                 start: newEventData.start,
                 end: newEventData.end,
-                assigned_to: newEventData.assigned_to,
+                assigned_to: assignedToJoined,
                 color: colorData
             });
         } else if (newEventData.isRecurring) {
@@ -135,7 +265,7 @@ export function CalendarView({ profiles = [] }) {
                         title: newEventData.title,
                         start: newEventData.start,
                         end: newEventData.end,
-                        assigned_to: newEventData.assigned_to,
+                        assigned_to: assignedToJoined,
                         color: '' // remove series link from this one
                     });
                     setIsModalOpen(false);
@@ -165,7 +295,7 @@ export function CalendarView({ profiles = [] }) {
                             title: newEventData.title,
                             start: eStart,
                             end: eEnd,
-                            assigned_to: newEventData.assigned_to,
+                            assigned_to: assignedToJoined,
                             color: colorData
                         });
                     }
@@ -180,11 +310,37 @@ export function CalendarView({ profiles = [] }) {
                 title: newEventData.title,
                 start: newEventData.start,
                 end: newEventData.end,
-                assigned_to: newEventData.assigned_to,
+                assigned_to: assignedToJoined,
                 color: colorData
             });
         }
         setIsModalOpen(false);
+    };
+
+    const toggleAssignee = (name) => {
+        setNewEventData(prev => {
+            let nextAssigned = Array.isArray(prev.assigned_to) ? [...prev.assigned_to] : [prev.assigned_to];
+            
+            if (name === 'Everyone') {
+                return { ...prev, assigned_to: ['Everyone'] };
+            }
+            
+            if (nextAssigned.includes('Everyone')) {
+                nextAssigned = [name];
+                return { ...prev, assigned_to: nextAssigned };
+            }
+
+            if (nextAssigned.includes(name)) {
+                nextAssigned = nextAssigned.filter(n => n !== name);
+                if (nextAssigned.length === 0) {
+                    nextAssigned = ['Everyone'];
+                }
+            } else {
+                nextAssigned.push(name);
+            }
+            
+            return { ...prev, assigned_to: nextAssigned };
+        });
     };
 
     if (loading) {
@@ -205,11 +361,59 @@ export function CalendarView({ profiles = [] }) {
                     &gt; Master Schedule
                 </h2>
                 <div className="h-[2px] flex-1 bg-gradient-to-r from-cyan-400 via-fuchsia-500 to-transparent shadow-sm dark:shadow-[0_0_10px_rgba(192,38,211,0.5)]"></div>
-                <div className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-black border border-slate-300 dark:border-cyan-800 shadow-sm dark:shadow-[0_0_10px_rgba(34,211,238,0.2)]">
-                    <Clock size={14} className="text-cyan-500 animate-pulse" />
-                    <span className="text-xs font-black uppercase tracking-widest text-slate-500 dark:text-cyan-400">
-                        Live Sync
-                    </span>
+                <div className="flex gap-2 items-center">
+                    <button 
+                        onClick={() => {
+                            setNewEventData({
+                                id: null,
+                                title: '',
+                                start: new Date(),
+                                end: new Date(Date.now() + 3600000),
+                                assigned_to: ['Everyone'],
+                                isRecurring: false,
+                                seriesId: null,
+                                recurUntil: null,
+                                selectedDays: [],
+                                location: ''
+                            });
+                            setIsModalOpen(true);
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-black uppercase tracking-widest text-xs transition-colors shadow-sm"
+                    >
+                        <CalendarIcon size={14} />
+                        New Event
+                    </button>
+
+                    <button 
+                        onClick={() => fileInputRef.current?.click()} 
+                        disabled={isScanning}
+                        className="flex items-center gap-2 px-4 py-2 bg-fuchsia-500 hover:bg-fuchsia-400 text-white font-black uppercase tracking-widest text-xs transition-colors shadow-sm disabled:opacity-50"
+                    >
+                        {isScanning ? <Loader2 size={14} className="animate-spin" /> : <Camera size={14} />}
+                        {isScanning ? 'Scanning...' : 'Scan Flyer'}
+                    </button>
+                    <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        onChange={handleFileUpload} 
+                        accept="image/*" 
+                        className="hidden" 
+                    />
+
+                    <button 
+                        onClick={() => setIsSubModalOpen(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-black border border-slate-300 dark:border-cyan-800 hover:border-cyan-400 text-slate-500 hover:text-cyan-500 font-black uppercase tracking-widest text-xs transition-colors shadow-sm"
+                    >
+                        <CalendarDays size={14} />
+                        Feeds
+                    </button>
+
+                    <div className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-black border border-slate-300 dark:border-cyan-800 shadow-sm dark:shadow-[0_0_10px_rgba(34,211,238,0.2)]">
+                        <Clock size={14} className="text-cyan-500 animate-pulse" />
+                        <span className="text-xs font-black uppercase tracking-widest text-slate-500 dark:text-cyan-400">
+                            Live Sync
+                        </span>
+                    </div>
                 </div>
             </div>
 
@@ -230,6 +434,8 @@ export function CalendarView({ profiles = [] }) {
                     onView={setView}
                     date={date}
                     onNavigate={setDate}
+                    min={new Date(2000, 1, 1, 6, 0, 0)}
+                    max={new Date(2000, 1, 1, 22, 0, 0)}
                 />
             </div>
 
@@ -259,6 +465,14 @@ export function CalendarView({ profiles = [] }) {
                                 />
                             </div>
 
+                            <div>
+                                <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-cyan-600 mb-2">Location / Address</label>
+                                <LocationAutocomplete 
+                                    value={newEventData.location}
+                                    onChange={(val) => setNewEventData({...newEventData, location: val})}
+                                />
+                            </div>
+
                             <div className="flex flex-col gap-6">
                                 <div>
                                     <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-cyan-600 mb-2">Start</label>
@@ -284,16 +498,36 @@ export function CalendarView({ profiles = [] }) {
 
                             <div>
                                 <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-cyan-600 mb-2">Participant</label>
-                                <select 
-                                    value={newEventData.assigned_to}
-                                    onChange={e => setNewEventData({...newEventData, assigned_to: e.target.value})}
-                                    className="w-full bg-slate-50 dark:bg-black border border-slate-300 dark:border-slate-800 p-3 text-slate-800 dark:text-white focus:outline-none focus:border-cyan-400 transition-colors appearance-none"
-                                >
-                                    <option value="Everyone">Everyone (Family)</option>
-                                    {profiles.map(p => (
-                                        <option key={p.id} value={p.name}>{p.name}</option>
-                                    ))}
-                                </select>
+                                <div className="flex flex-wrap gap-1.5">
+                                    <button 
+                                        type="button"
+                                        onClick={() => toggleAssignee('Everyone')}
+                                        className={`px-3 py-1.5 text-xs font-black uppercase border transition-colors ${
+                                            newEventData.assigned_to.includes('Everyone')
+                                                ? 'border-amber-400 bg-amber-400/10 text-amber-500'
+                                                : 'border-slate-300 dark:border-slate-700 text-slate-500 hover:border-amber-400'
+                                        }`}
+                                    >
+                                        Everyone
+                                    </button>
+                                    {profiles.map(p => {
+                                        const isSelected = newEventData.assigned_to.includes(p.name);
+                                        return (
+                                            <button 
+                                                key={p.id} 
+                                                type="button"
+                                                onClick={() => toggleAssignee(p.name)}
+                                                className={`px-3 py-1.5 text-xs font-black uppercase border transition-colors ${
+                                                    isSelected
+                                                        ? 'border-cyan-400 bg-cyan-400/10 text-cyan-500'
+                                                        : 'border-slate-300 dark:border-slate-700 text-slate-500 hover:border-cyan-400'
+                                                }`}
+                                            >
+                                                {p.name}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
                             </div>
 
                             <div className="mt-2">
@@ -370,6 +604,15 @@ export function CalendarView({ profiles = [] }) {
                     </div>
                 </div>
             )}
+
+            {/* Subscriptions Modal */}
+            <SubscriptionsModal 
+                isOpen={isSubModalOpen}
+                onClose={() => setIsSubModalOpen(false)}
+                subscriptions={subscriptions}
+                addSubscription={addSubscription}
+                removeSubscription={removeSubscription}
+            />
         </div>
     );
 }

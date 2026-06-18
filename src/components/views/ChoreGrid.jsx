@@ -2,7 +2,7 @@ import { GripHorizontal } from 'lucide-react';
 import { RewardBar } from '../features/RewardBar';
 import { ChoreCard } from '../features/ChoreCard';
 
-export function ChoreGrid({ sortedGroupEntries, profiles, groupBy, toggleChore, birthdayProfiles = [] }) {
+export function ChoreGrid({ sortedGroupEntries, profiles, groupBy, toggleChore, rotateAssignee, birthdayProfiles = [] }) {
     if (sortedGroupEntries.length === 0) {
         return (
             <div className="p-20 text-center border-4 border-dashed border-slate-300 dark:border-slate-800 rounded-[3rem] bg-slate-100 dark:bg-slate-900/30">
@@ -59,6 +59,7 @@ export function ChoreGrid({ sortedGroupEntries, profiles, groupBy, toggleChore, 
                                         key={chore.id}
                                         chore={chore}
                                         onToggle={toggleChore}
+                                        onRotate={rotateAssignee}
                                     />
                                 ))}
                             </div>

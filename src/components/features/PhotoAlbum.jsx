@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { Camera, GripHorizontal, ChevronLeft, ChevronRight, Upload, Trash2, Image as ImageIcon } from 'lucide-react';
 import { usePhotos } from '../../hooks/usePhotos';
+import imageCompression from 'browser-image-compression';
 
 export function PhotoAlbum() {
     const { photos, loading, addPhoto, deletePhoto } = usePhotos();
@@ -10,8 +11,20 @@ export function PhotoAlbum() {
     const handleFileChange = async (e) => {
         const file = e.target.files[0];
         if (file) {
-            await addPhoto(file);
-            setCurrentIndex(0); // Go to newest photo
+            try {
+                const options = {
+                    maxSizeMB: 0.5,
+                    maxWidthOrHeight: 1920,
+                    useWebWorker: true,
+                };
+                const compressedFile = await imageCompression(file, options);
+                await addPhoto(compressedFile);
+                setCurrentIndex(0); // Go to newest photo
+            } catch (error) {
+                console.error("Compression error:", error);
+                await addPhoto(file); // Fallback to original
+                setCurrentIndex(0);
+            }
         }
         // Reset input
         e.target.value = null;

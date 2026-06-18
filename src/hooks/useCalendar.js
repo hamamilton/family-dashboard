@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { pb } from '../lib/pocketbase';
+import ICAL from 'ical.js';
 
 const loadLocalEvents = () => {
     const localData = localStorage.getItem('family_dashboard_events');
@@ -20,13 +21,19 @@ const loadLocalEvents = () => {
 
 export function useCalendar() {
     const [events, setEvents] = useState(loadLocalEvents());
-    const [loading, setLoading] = useState(false); // Data is loaded synchronously locally
+    const [subscriptions, setSubscriptions] = useState([]);
+    const [loading, setLoading] = useState(false);
 
     const fetchEvents = useCallback(async () => {
         try {
             const records = await pb.collection('events').getFullList({ sort: 'date' });
             
-            const formattedRecords = records.map(record => {
+            const subRecords = records.filter(r => r.title === '[ICAL_SUBSCRIPTION]');
+            const normalRecords = records.filter(r => r.title !== '[ICAL_SUBSCRIPTION]');
+
+            setSubscriptions(subRecords.map(r => ({ id: r.id, url: r.color })));
+
+            const formattedRecords = normalRecords.map(record => {
                 const startDate = new Date(record.date || record.start);
                 const endDate = record.end 
                     ? new Date(record.end) 
@@ -40,9 +47,77 @@ export function useCalendar() {
                 };
             }).filter(e => !isNaN(e.start.getTime()) && !isNaN(e.end.getTime()));
             
-            console.log(`Fetched ${formattedRecords.length} calendar events from PocketBase`);
-            setEvents(formattedRecords);
-            localStorage.setItem('family_dashboard_events', JSON.stringify(formattedRecords));
+            // Fetch subscriptions
+            let subEvents = [];
+            for (const sub of subRecords) {
+                try {
+                    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(sub.color)}`;
+                    const res = await fetch(proxyUrl);
+                    if (!res.ok) continue;
+                    const text = await res.text();
+                    
+                    const jcalData = ICAL.parse(text);
+                    const comp = new ICAL.Component(jcalData);
+                    const vevents = comp.getAllSubcomponents('vevent');
+                    
+                    const now = new Date();
+                    const minDate = new Date(now.getFullYear() - 1, now.getMonth(), 1); // 1 year ago
+                    const maxDate = new Date(now.getFullYear() + 1, now.getMonth(), 1); // 1 year ahead
+
+                    vevents.forEach(vevent => {
+                        const event = new ICAL.Event(vevent);
+                        if (!event.startDate) return;
+                        
+                        const duration = event.endDate ? event.endDate.toUnixTime() - event.startDate.toUnixTime() : 3600;
+
+                        if (event.isRecurring()) {
+                            try {
+                                const iter = event.iterator();
+                                let next;
+                                let limit = 0;
+                                while ((next = iter.next()) && limit < 100) {
+                                    const jsDate = next.toJSDate();
+                                    if (jsDate > maxDate) break;
+                                    if (jsDate >= minDate) {
+                                        const nextEnd = new Date(jsDate.getTime() + duration * 1000);
+                                        subEvents.push({
+                                            id: `ical-${sub.id}-${event.uid}-${limit}`,
+                                            title: event.summary,
+                                            start: jsDate,
+                                            end: nextEnd,
+                                            assigned_to: 'Everyone',
+                                            color: '#64748b', // slate-500 representation
+                                            isExternal: true,
+                                            readonly: true
+                                        });
+                                    }
+                                    limit++;
+                                }
+                            } catch(e) { console.warn("Recurrence error", e); }
+                        } else {
+                            const jsDate = event.startDate.toJSDate();
+                            if (jsDate >= minDate && jsDate <= maxDate) {
+                                subEvents.push({
+                                    id: `ical-${sub.id}-${event.uid}`,
+                                    title: event.summary,
+                                    start: jsDate,
+                                    end: event.endDate ? event.endDate.toJSDate() : new Date(jsDate.getTime() + duration * 1000),
+                                    assigned_to: 'Everyone',
+                                    color: '#64748b',
+                                    isExternal: true,
+                                    readonly: true
+                                });
+                            }
+                        }
+                    });
+                } catch(err) {
+                    console.warn('Failed to parse ical feed', sub.color, err);
+                }
+            }
+
+            const allEvents = [...formattedRecords, ...subEvents];
+            setEvents(allEvents);
+            localStorage.setItem('family_dashboard_events', JSON.stringify(allEvents));
         } catch (err) {
             console.warn("Could not fetch events from Pocketbase.", err);
         } finally {
@@ -180,7 +255,30 @@ export function useCalendar() {
         }
     };
 
-    return { events, loading, addEvent, addEvents, deleteEvent, updateEvent };
+    const addSubscription = async (url) => {
+        try {
+            await pb.collection('events').create({
+                title: '[ICAL_SUBSCRIPTION]',
+                color: url,
+                date: new Date().toISOString(),
+                end: new Date().toISOString()
+            });
+            await fetchEvents();
+        } catch (err) {
+            console.error("Failed to add subscription", err);
+        }
+    };
+
+    const removeSubscription = async (id) => {
+        try {
+            await pb.collection('events').delete(id);
+            await fetchEvents();
+        } catch (err) {
+            console.error("Failed to remove subscription", err);
+        }
+    };
+
+    return { events, subscriptions, loading, addEvent, addEvents, deleteEvent, updateEvent, addSubscription, removeSubscription };
 }
 
 export const getEventMetadata = (event) => {
