@@ -330,8 +330,8 @@ export function useChores(groupBy) {
             // 1. Always update the chore status first
             await pb.collection('chores').update(choreId, { is_completed: newStatus });
 
-            // 2. Only try to update XP if a profile exists and we are CHECKING the box
-            if (assignedProfiles.length > 0 && newStatus && !isCovered) {
+            // 2. Update XP if a profile exists and we are not covered
+            if (assignedProfiles.length > 0 && !isCovered) {
                 const baseXP = chore.xp_reward || 10;
 
                 await Promise.all(assignedProfiles.map(async (profile) => {
@@ -339,9 +339,13 @@ export function useChores(groupBy) {
                     const isOp = profile.is_op || todayHoliday !== null; 
                     const earnedXP = isOp ? Math.floor(baseXP * 1.5) : baseXP;
 
+                    const newBalance = newStatus 
+                        ? profile.xp_balance + earnedXP 
+                        : Math.max(0, profile.xp_balance - earnedXP);
+
                     return pb.collection('profiles').update(profile.id, {
-                        xp_balance: profile.xp_balance + earnedXP,
-                        is_op: profile.is_op || (profile.xp_balance + earnedXP >= 1000)
+                        xp_balance: newBalance,
+                        is_op: newBalance >= 1000
                     });
                 }));
             }

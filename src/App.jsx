@@ -12,6 +12,8 @@ import { GospelStudy } from './components/features/GospelStudy';
 import { LocalEvents } from './components/features/LocalEvents';
 import { LittleVillageEvents } from './components/features/LittleVillageEvents';
 import { RefreshCw } from 'lucide-react';
+import { useInactivity } from './hooks/useInactivity';
+import { Screensaver } from './components/layout/Screensaver';
 
 function App() {
   const [groupBy, setGroupBy] = useState('day_due');
@@ -28,6 +30,7 @@ function App() {
   const [appTheme, setAppTheme] = useState(() => localStorage.getItem('appTheme') || 'scifi');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === 'true');
   const [adminOpen, setAdminOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Dark mode effect
   useEffect(() => {
@@ -56,17 +59,28 @@ function App() {
   const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
 
   const { sortedGroupEntries, loading, toggleChore, rotateAssignee, chores, profiles, todayHoliday, birthdayProfiles, fetchError } = useChores(groupBy);
+  const { isIdle, setIsIdle } = useInactivity();
 
   const children = profiles.filter(p => !p.is_parent);
   const allChildrenMetGoal = children.length > 0 && children.every(c => (c.xp_balance || 0) >= 100);
 
   return (
     <div className={`h-screen w-screen overflow-hidden flex flex-col app-root ${allChildrenMetGoal ? 'bonus-glow' : ''}`}>
+      {isIdle && (
+        <Screensaver 
+          onWake={() => setIsIdle(false)} 
+          childrenProfiles={children} 
+          profiles={profiles}
+        />
+      )}
+
       {/* Top Header Bar */}
       <Header
         isDarkMode={isDarkMode}
         childrenProfiles={children}
         profiles={profiles}
+        isMobileMenuOpen={isMobileMenuOpen}
+        setIsMobileMenuOpen={setIsMobileMenuOpen}
       />
 
       <AdminPanel isOpen={adminOpen} onClose={() => setAdminOpen(false)} />
@@ -102,6 +116,8 @@ function App() {
           setIsCollapsed={setSidebarCollapsed}
           isDarkMode={isDarkMode}
           toggleDarkMode={toggleDarkMode}
+          isMobileMenuOpen={isMobileMenuOpen}
+          setIsMobileMenuOpen={setIsMobileMenuOpen}
         />
 
         {/* Page Content */}

@@ -49,7 +49,12 @@ const EventComponent = ({ event, profiles }) => {
 
     return (
         <div className={`p-1 text-xs font-black truncate rounded-sm ${colorClass} text-white shadow-sm h-full flex flex-col justify-between`}>
-            <span className="truncate">{event.title}</span>
+            <div className="flex flex-col overflow-hidden">
+                <span className="truncate">{event.title}</span>
+                <span className="text-[9px] font-bold uppercase opacity-90 truncate tracking-wider mt-0.5">
+                    {assignees.join(', ')}
+                </span>
+            </div>
             {location && (
                 <div className="flex items-center gap-1 mt-0.5 opacity-80">
                     <MapPin size={10} className="flex-shrink-0" />
@@ -58,6 +63,164 @@ const EventComponent = ({ event, profiles }) => {
             )}
         </div>
     );
+};
+
+function isAllDayEvent(event) {
+    if (event.allDay) return true;
+    const duration = new Date(event.end).getTime() - new Date(event.start).getTime();
+    if (duration >= 24 * 60 * 60 * 1000) return true;
+    
+    const start = new Date(event.start);
+    const end = new Date(event.end);
+    if (start.getHours() === 0 && start.getMinutes() === 0 && end.getHours() === 0 && end.getMinutes() === 0) {
+        return true;
+    }
+    return false;
+}
+
+const CustomAgendaView = ({ events, date, localizer, length = 30, profiles }) => {
+    const start = new Date(date);
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date(start);
+    end.setDate(end.getDate() + length);
+    end.setHours(23, 59, 59, 999);
+
+    const inRange = events.filter(e => {
+        const eStart = new Date(e.start);
+        const eEnd = new Date(e.end);
+        // Ensure event overlaps with our 30-day window
+        return eStart <= end && eEnd >= start;
+    });
+
+    inRange.sort((a, b) => new Date(a.start) - new Date(b.start));
+
+    // Group by Day
+    const grouped = {};
+    inRange.forEach(event => {
+        const eStart = new Date(event.start);
+        eStart.setHours(0, 0, 0, 0);
+
+        const eEnd = new Date(event.end);
+        // If the event ends exactly at midnight, subtract 1 ms so it doesn't spill into the next day unnecessarily
+        if (eEnd.getHours() === 0 && eEnd.getMinutes() === 0 && eEnd.getSeconds() === 0 && eEnd > eStart) {
+            eEnd.setMilliseconds(eEnd.getMilliseconds() - 1);
+        }
+        eEnd.setHours(23, 59, 59, 999);
+
+        let current = new Date(eStart);
+        while (current <= eEnd) {
+            if (current >= start && current <= end) {
+                const dayKey = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
+                
+                if (!grouped[dayKey]) {
+                    grouped[dayKey] = {
+                        dateObj: new Date(current),
+                        allDay: [],
+                        timed: []
+                    };
+                }
+                
+                if (isAllDayEvent(event)) {
+                    // Prevent duplicates if same event happens to be processed multiple times?
+                    // Not strictly needed since it's a single pass per event, but good practice.
+                    grouped[dayKey].allDay.push(event);
+                } else {
+                    grouped[dayKey].timed.push(event);
+                }
+            }
+            // Move to next day
+            current.setDate(current.getDate() + 1);
+        }
+    });
+
+    const dayKeys = Object.keys(grouped).sort();
+
+    if (dayKeys.length === 0) {
+        return (
+            <div className="p-12 text-center text-slate-500 font-bold uppercase tracking-widest bg-slate-50 dark:bg-slate-900 rounded-lg mt-4">
+                No events in this time range.
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex flex-col gap-6 p-2 overflow-y-auto h-full custom-scrollbar">
+            {dayKeys.map(key => {
+                const group = grouped[key];
+                const dayName = localizer.format(group.dateObj, 'EEEE');
+                const dateNum = localizer.format(group.dateObj, 'MMM d, yyyy');
+                
+                return (
+                    <div key={key} className="flex flex-col border border-slate-200 dark:border-cyan-900/50 rounded-xl overflow-hidden bg-white dark:bg-black shadow-sm">
+                        {/* Day Header */}
+                        <div className="bg-slate-100 dark:bg-slate-900/50 p-3 border-b border-slate-200 dark:border-cyan-900/50 flex items-baseline gap-2">
+                            <h3 className="text-lg font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-widest">{dayName}</h3>
+                            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{dateNum}</span>
+                        </div>
+                        
+                        <div className="p-3 flex flex-col gap-4">
+                            {/* All Day Events (Clustered) */}
+                            {group.allDay.length > 0 && (
+                                <div className="flex flex-col gap-2 border-l-4 border-fuchsia-500 pl-3">
+                                    <div className="text-[10px] font-black text-fuchsia-500 uppercase tracking-widest mb-1">All Day</div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                        {group.allDay.map(evt => (
+                                            <div key={evt.id} className="h-16">
+                                                <EventComponent event={evt} profiles={profiles} />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {/* Timed Events */}
+                            {group.timed.length > 0 && (
+                                <div className="flex flex-col gap-3">
+                                    {group.timed.map(evt => (
+                                        <div key={evt.id} className="flex items-stretch gap-3">
+                                            <div className="w-20 flex-shrink-0 flex flex-col items-end pt-1">
+                                                <span className="text-xs font-black text-slate-700 dark:text-slate-300">
+                                                    {localizer.format(new Date(evt.start), 'h:mm a')}
+                                                </span>
+                                                <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 mt-0.5 uppercase tracking-wider">
+                                                    to {localizer.format(new Date(evt.end), 'h:mm a')}
+                                                </span>
+                                            </div>
+                                            <div className="flex-1 min-h-[4rem]">
+                                                <EventComponent event={evt} profiles={profiles} />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
+CustomAgendaView.title = (start, { localizer, length = 30 }) => {
+    const end = new Date(start);
+    end.setDate(end.getDate() + length);
+    return `${localizer.format(start, 'MMM d, yyyy')} — ${localizer.format(end, 'MMM d, yyyy')}`;
+};
+
+CustomAgendaView.navigate = (date, action, { length = 30 }) => {
+    const newDate = new Date(date);
+    switch (action) {
+        case 'PREV':
+            newDate.setDate(newDate.getDate() - length);
+            break;
+        case 'NEXT':
+            newDate.setDate(newDate.getDate() + length);
+            break;
+        default:
+            return new Date();
+    }
+    return newDate;
 };
 
 export function CalendarView({ profiles = [] }) {
@@ -79,7 +242,7 @@ export function CalendarView({ profiles = [] }) {
         selectedDays: [],
         location: ''
     });
-    const [view, setView] = useState('month');
+    const [view, setView] = useState('agenda');
     const [date, setDate] = useState(new Date());
 
     const handleSelectSlot = (slotInfo) => {
@@ -421,11 +584,18 @@ export function CalendarView({ profiles = [] }) {
                 <Calendar
                     localizer={localizer}
                     events={events}
+                    profiles={profiles}
                     startAccessor="start"
                     endAccessor="end"
                     style={{ height: '100%' }}
                     components={{
                         event: (props) => <EventComponent {...props} profiles={profiles} />
+                    }}
+                    views={{
+                        month: true,
+                        week: true,
+                        day: true,
+                        agenda: CustomAgendaView
                     }}
                     selectable={true}
                     onSelectSlot={handleSelectSlot}

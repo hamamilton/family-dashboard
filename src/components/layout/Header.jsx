@@ -1,11 +1,17 @@
-import { User, Sun, Moon } from 'lucide-react';
+import { User, Sun, Moon, Menu, X } from 'lucide-react';
 import { SideQuest } from '../features/SideQuest';
 
-export function Header({ isDarkMode, childrenProfiles = [], profiles = [] }) {
+export function Header({ isDarkMode, childrenProfiles = [], profiles = [], isMobileMenuOpen, setIsMobileMenuOpen }) {
     return (
         <header className="flex items-center gap-4 px-4 py-2 font-mono border-b border-[#333333] header-bg flex-none h-[60px]">
-            {/* Left: Title */}
+            {/* Left: Menu Toggle (Mobile Only) + Title */}
             <div className="flex items-center gap-3 shrink-0">
+                <button 
+                    onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                    className="md:hidden p-1 text-cyan-400 hover:bg-cyan-900/30 rounded-md transition-colors"
+                >
+                    {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+                </button>
                 <h1 className="text-xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-fuchsia-500 to-amber-400">
                     FAMILY HUB
                 </h1>

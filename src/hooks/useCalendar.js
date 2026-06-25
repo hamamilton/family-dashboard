@@ -51,10 +51,20 @@ export function useCalendar() {
             let subEvents = [];
             for (const sub of subRecords) {
                 try {
-                    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(sub.color)}`;
-                    const res = await fetch(proxyUrl);
-                    if (!res.ok) continue;
-                    const text = await res.text();
+                    let text = '';
+                    try {
+                        const directRes = await fetch(sub.color);
+                        if (directRes.ok) {
+                            text = await directRes.text();
+                        } else {
+                            throw new Error('Direct fetch failed');
+                        }
+                    } catch (e) {
+                        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(sub.color)}`;
+                        const res = await fetch(proxyUrl);
+                        if (!res.ok) continue;
+                        text = await res.text();
+                    }
                     
                     const jcalData = ICAL.parse(text);
                     const comp = new ICAL.Component(jcalData);

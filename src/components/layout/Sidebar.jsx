@@ -29,7 +29,9 @@ export function Sidebar({
   isCollapsed,
   setIsCollapsed,
   isDarkMode,
-  toggleDarkMode
+  toggleDarkMode,
+  isMobileMenuOpen,
+  setIsMobileMenuOpen
 }) {
   const [isFullscreen, setIsFullscreen] = React.useState(false);
 
@@ -68,7 +70,22 @@ export function Sidebar({
   ];
 
   return (
-    <div className={`flex flex-col h-full sidebar-root border-r transition-all duration-300 ${isCollapsed ? 'w-[62px]' : 'w-[220px]'}`}>
+    <>
+      {/* Mobile Backdrop */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-sm"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+      
+      <div className={`
+        flex flex-col sidebar-root transition-all duration-300 z-50
+        fixed inset-y-0 left-0 h-full border-r
+        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+        md:relative md:translate-x-0 md:h-full md:flex
+        ${isCollapsed ? 'w-[62px]' : 'w-[220px]'}
+      `}>
       {/* Collapse Toggle */}
       <div className={`flex items-center border-b sidebar-border px-3 h-[60px] shrink-0 ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
         {!isCollapsed && <span className="font-black text-sm text-orange-500 tracking-wider">FamilyHub</span>}
@@ -164,6 +181,7 @@ export function Sidebar({
           ))}
         </ul>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
