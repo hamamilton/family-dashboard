@@ -56,6 +56,19 @@ function App() {
   useEffect(() => { localStorage.setItem('activeTab', activeTab); }, [activeTab]);
   useEffect(() => { localStorage.setItem('sidebarCollapsed', sidebarCollapsed); }, [sidebarCollapsed]);
 
+  // Refresh app at midnight
+  useEffect(() => {
+    const now = new Date();
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const msUntilMidnight = tomorrow - now;
+
+    const timeout = setTimeout(() => {
+      window.location.reload();
+    }, msUntilMidnight);
+
+    return () => clearTimeout(timeout);
+  }, []);
+
   const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
 
   const { sortedGroupEntries, loading, toggleChore, rotateAssignee, chores, profiles, todayHoliday, birthdayProfiles, fetchError } = useChores(groupBy);
