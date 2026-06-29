@@ -227,12 +227,6 @@ export function useChores(groupBy) {
                     const isStrict = c.chore_name && c.chore_name.includes('[STRICT]');
                     const penaltyAmount = isStrict ? 5 : 2;
 
-                    for (const profile of assignedProfiles) {
-                        await pb.collection('profiles').update(profile.id, {
-                            xp_balance: Math.max(0, profile.xp_balance - penaltyAmount)
-                        });
-                    }
-                    
                     if (isStrict) {
                         // Mark as completed so it disappears and resets naturally next week.
                         await pb.collection('chores').update(c.id, { is_completed: true });
@@ -241,6 +235,14 @@ export function useChores(groupBy) {
                         const currentName = c.chore_name || '';
                         const newName = currentName.endsWith(' ') ? currentName.trimEnd() : currentName + ' ';
                         await pb.collection('chores').update(c.id, { chore_name: newName });
+                    }
+
+                    for (const profile of assignedProfiles) {
+                        // Fetch the latest profile to prevent race conditions during parallel updates
+                        const latestProfile = await pb.collection('profiles').getOne(profile.id);
+                        await pb.collection('profiles').update(profile.id, {
+                            xp_balance: Math.max(0, (latestProfile.xp_balance || 0) - penaltyAmount)
+                        });
                     }
                 }));
                 
@@ -335,13 +337,14 @@ export function useChores(groupBy) {
                 const baseXP = chore.xp_reward || 10;
 
                 await Promise.all(assignedProfiles.map(async (profile) => {
-                    // Temporary OP status on holidays!
-                    const isOp = profile.is_op || todayHoliday !== null; 
+                    // Fetch the latest profile to prevent race conditions from rapid toggling
+                    const latestProfile = await pb.collection('profiles').getOne(profile.id);
+                    const isOp = latestProfile.is_op || todayHoliday !== null; 
                     const earnedXP = isOp ? Math.floor(baseXP * 1.5) : baseXP;
 
                     const newBalance = newStatus 
-                        ? profile.xp_balance + earnedXP 
-                        : Math.max(0, profile.xp_balance - earnedXP);
+                        ? (latestProfile.xp_balance || 0) + earnedXP 
+                        : Math.max(0, (latestProfile.xp_balance || 0) - earnedXP);
 
                     return pb.collection('profiles').update(profile.id, {
                         xp_balance: newBalance,
