@@ -5,16 +5,22 @@ const CFM_SCHEDULE = [
     { start: '2026-05-11', end: '2026-05-17', title: 'Deuteronomy 6–8; 15; 18; 29–30; 34', theme: 'Beware Lest Thou Forget the Lord', quote: 'Thou shalt love the Lord thy God with all thine heart, and with all thy soul, and with all thy might.', verse: 'Deuteronomy 6:5' },
     { start: '2026-05-18', end: '2026-05-24', title: 'Joshua 1–6; 23–24', theme: 'Be Strong and of a Good Courage' },
     { start: '2026-05-25', end: '2026-05-31', title: 'Judges 2–4; 6–8; 13–16', theme: 'The Lord Raised Up a Deliverer' },
+    { start: '2026-06-01', end: '2026-06-07', title: 'Ruth; 1 Samuel 1–3', theme: 'My Heart Rejoiceth in the Lord' },
+    { start: '2026-06-08', end: '2026-06-14', title: '1 Samuel 8–10; 13; 15–18', theme: 'The Battle Is the Lord\'s', quote: 'The Lord seeth not as man seeth; for man looketh on the outward appearance, but the Lord looketh on the heart.', verse: '1 Samuel 16:7' },
+    { start: '2026-06-15', end: '2026-06-21', title: '2 Samuel 5–7; 11–12; 1 Kings 3; 8; 11', theme: 'Thy Kingdom Shall Be Established' },
+    { start: '2026-06-22', end: '2026-06-28', title: '1 Kings 17–19', theme: 'If the Lord Be God, Follow Him' },
+    { start: '2026-06-29', end: '2026-07-05', title: '2 Kings 2–7', theme: 'There Is a Prophet in Israel', quote: 'Fear not: for they that be with us are more than they that be with them.', verse: '2 Kings 6:16' },
+    { start: '2026-07-06', end: '2026-07-12', title: '2 Kings 17–25', theme: 'He Trusted in the Lord God of Israel' },
 ];
 
 export function GospelStudy() {
-    const today = new Date('2026-05-13'); // Fixed for demo based on user metadata
+    const today = new Date();
     
     const currentLesson = CFM_SCHEDULE.find(item => {
         const start = new Date(item.start);
         const end = new Date(item.end);
         return today >= start && today <= end;
-    }) || CFM_SCHEDULE[1];
+    }) || CFM_SCHEDULE[CFM_SCHEDULE.length - 1];
 
     return (
         <div className="flex flex-col h-full bg-white dark:bg-slate-950 border-2 border-amber-200 dark:border-amber-900 shadow-lg p-6 font-mono relative overflow-hidden group">
