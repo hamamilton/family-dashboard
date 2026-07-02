@@ -69,6 +69,7 @@ function ChoreForm({ chore, profiles, onSave, onCancel, saving }) {
     const initialName = (chore.chore_name || '').replace('[STRICT]', '').trim();
     const [form, setForm] = useState({ ...chore, chore_name: initialName });
     const [isStrict, setIsStrict] = useState((chore.chore_name || '').includes('[STRICT]'));
+    const [cannotCover, setCannotCover] = useState(chore.cannot_cover || false);
 
     const toggleMulti = (field, val) => {
         setForm(f => ({
@@ -87,7 +88,7 @@ function ChoreForm({ chore, profiles, onSave, onCancel, saving }) {
             finalName += ' [STRICT]';
         }
         
-        onSave({ ...form, chore_name: finalName });
+        onSave({ ...form, chore_name: finalName, cannot_cover: cannotCover });
     };
 
     const dueDateOptions = form.frequency === 'weekly' ? DAYS : form.frequency === 'monthly' ? DATES : [];
@@ -113,6 +114,20 @@ function ChoreForm({ chore, profiles, onSave, onCancel, saving }) {
                     />
                     <label htmlFor="strict_toggle" className="text-[10px] text-slate-400 uppercase tracking-widest cursor-pointer hover:text-white transition-colors">
                         Strict Deadline (Disappears if missed, -5 XP)
+                    </label>
+                </div>
+
+                {/* Cannot Cover Toggle */}
+                <div className="flex items-center gap-2 mt-2">
+                    <input 
+                        type="checkbox" 
+                        id="cannot_cover_toggle"
+                        checked={cannotCover}
+                        onChange={(e) => setCannotCover(e.target.checked)}
+                        className="w-4 h-4 accent-cyan-500"
+                    />
+                    <label htmlFor="cannot_cover_toggle" className="text-[10px] text-slate-400 uppercase tracking-widest cursor-pointer hover:text-white transition-colors">
+                        Cannot be covered by parents
                     </label>
                 </div>
             </div>
@@ -324,6 +339,7 @@ export function AdminPanel({ isOpen, onClose }) {
                 round_robin_pool: form.round_robin_pool, // array of profile IDs
                 is_completed: form.is_completed || false,
                 rotation_period: form.rotation_period || 7,
+                cannot_cover: form.cannot_cover || false,
             };
 
             if (form.id) {

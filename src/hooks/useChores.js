@@ -528,7 +528,7 @@ export function useChores(groupBy) {
                         return false;
                     });
 
-                    if (isBusy && !parents.some(p => p.name === person)) {
+                    if (isBusy && !parents.some(p => p.name === person) && !c.cannot_cover) {
                         newAssigneesList[aIdx] = `${person} (Covered by Parents)`;
                         isCovered = true;
                     }
