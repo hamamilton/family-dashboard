@@ -517,6 +517,9 @@ export function useChores(groupBy) {
                             const eStart = parsePBDate(e.start || e.date);
                             eStart.setHours(0,0,0,0);
                             const eEnd = parsePBDate(e.end);
+                            if (eEnd.getHours() === 0 && eEnd.getMinutes() === 0) {
+                                eEnd.setDate(eEnd.getDate() - 1);
+                            }
                             eEnd.setHours(23,59,59,999);
                             
                             const eventAssigneeStr = e.assignee || e.assigned_to || '';
