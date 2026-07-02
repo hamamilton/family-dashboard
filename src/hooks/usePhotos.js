@@ -11,7 +11,7 @@ export function usePhotos() {
             const formatted = records.map(record => ({
                 id: record.id,
                 dataUrl: pb.files.getURL(record, record.image),
-                timestamp: new Date(record.created).getTime(),
+                timestamp: new Date(record.created.replace(' ', 'T')).getTime(),
                 record: record
             }));
             setPhotos(formatted);

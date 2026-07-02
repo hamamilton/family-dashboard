@@ -48,7 +48,8 @@ create_collection "profiles" '{
     {"name": "xp_balance", "type": "number", "required": false, "options": {"min": 0, "max": null, "noDecimal": true}},
     {"name": "is_op",      "type": "bool",   "required": false, "options": {}},
     {"name": "is_parent",  "type": "bool",   "required": false, "options": {}},
-    {"name": "birthday",   "type": "text",   "required": false, "options": {"min": null, "max": null, "pattern": ""}}
+    {"name": "birthday",   "type": "text",   "required": false, "options": {"min": null, "max": null, "pattern": ""}},
+    {"name": "last_reset_month", "type": "text", "required": false, "options": {"min": null, "max": null, "pattern": ""}}
   ]
 }'
 

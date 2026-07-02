@@ -3,7 +3,19 @@ import { pb } from '../lib/pocketbase';
 
 const dayMap = { "Sunday": 0, "Monday": 1, "Tuesday": 2, "Wednesday": 3, "Thursday": 4, "Friday": 5, "Saturday": 6 };
 
-export function getLocalYYYYMMDD(dateObj) {
+export function parsePBDate(dateStr) {
+    if (!dateStr) return new Date();
+    if (typeof dateStr === 'string' && dateStr.includes(' ')) {
+        return new Date(dateStr.replace(' ', 'T'));
+    }
+    return new Date(dateStr);
+}
+
+export function getLocalYYYYMMDD(dateObjOrString) {
+    const dateObj = (typeof dateObjOrString === 'string' || !dateObjOrString?.getFullYear) 
+        ? parsePBDate(dateObjOrString) 
+        : dateObjOrString;
+    if (isNaN(dateObj.getFullYear())) return '';
     const year = dateObj.getFullYear();
     const month = String(dateObj.getMonth() + 1).padStart(2, '0');
     const day = String(dateObj.getDate()).padStart(2, '0');
@@ -63,7 +75,7 @@ export function isChoreOverdue(chore) {
     
     const now = new Date();
     now.setHours(0,0,0,0);
-    const createdDate = new Date(chore.created);
+    const createdDate = parsePBDate(chore.created);
     
     if (chore.frequency === 'weekly' || chore.frequency === 'monthly') {
         const minDiff = getDaysLate(chore); 
@@ -88,7 +100,7 @@ export function shouldPenalize(chore) {
     
     const now = new Date();
     now.setHours(0,0,0,0);
-    const createdDate = new Date(chore.created);
+    const createdDate = parsePBDate(chore.created);
     
     if (chore.frequency === 'daily') {
         return createdDate < now; // If it was created before today and isn't completed, it missed yesterday
@@ -120,8 +132,8 @@ export function isMultiDay(event) {
         }
     } catch(e) {}
 
-    const start = new Date(event.start || event.date);
-    const end = new Date(event.end);
+    const start = parsePBDate(event.start || event.date);
+    const end = parsePBDate(event.end);
     if (!end || isNaN(end.getTime()) || !start || isNaN(start.getTime())) return false;
     
     const startStr = getLocalYYYYMMDD(start);
@@ -151,11 +163,28 @@ export function useChores(groupBy) {
 
             const now = new Date();
             const todayStr = getLocalYYYYMMDD(now);
+            const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+            // 0.5. Monthly XP Reset
+            if (now.getDate() === 1) {
+                const profilesToReset = profileList.filter(p => !p.is_parent && p.last_reset_month !== currentMonthStr);
+                
+                if (profilesToReset.length > 0) {
+                    await Promise.all(profilesToReset.map(async (p) => {
+                        await pb.collection('profiles').update(p.id, {
+                            xp_balance: 0,
+                            last_reset_month: currentMonthStr
+                        });
+                    }));
+                    fetchData(); // Refetch cleanly
+                    return;
+                }
+            }
 
             // 1. Reset Recurring Chores
             const choresToReset = rawChoreList.filter(c => {
                 if (!c.is_completed || !c.frequency || c.frequency === 'none') return false;
-                const updatedStr = getLocalYYYYMMDD(new Date(c.updated));
+                const updatedStr = getLocalYYYYMMDD(parsePBDate(c.updated));
                 if (updatedStr === todayStr) return false; // Don't reset if just checked off today
 
                 if (c.frequency === 'daily') return true;
@@ -213,7 +242,7 @@ export function useChores(groupBy) {
             const choresToPenalize = rawChoreList.filter(c => {
                 if (!shouldPenalize(c)) return false;
                 
-                const updatedStr = getLocalYYYYMMDD(new Date(c.updated));
+                const updatedStr = getLocalYYYYMMDD(parsePBDate(c.updated));
                 if (updatedStr === todayStr) return false; // Already penalized/touched today
                 
                 return true;
@@ -281,7 +310,7 @@ export function useChores(groupBy) {
             // 2. Filter Visibility
             const visibleChores = rawChoreList.filter(c => {
                 if (!c.is_completed) return true; 
-                const updatedStr = getLocalYYYYMMDD(new Date(c.updated));
+                const updatedStr = getLocalYYYYMMDD(parsePBDate(c.updated));
                 if (updatedStr === todayStr) return true; 
                 
                 if (c.frequency === 'monthly' || c.frequency === 'weekly') return false;
@@ -484,18 +513,19 @@ export function useChores(groupBy) {
                     const person = assigneesList[aIdx];
                     
                     const isBusy = rawEvents.some(e => {
-                        if (!isMultiDay(e)) return false;
-                        
-                        const eventAssigneeStr = e.assignee || e.assigned_to || '';
-                        const eAssignees = Array.isArray(eventAssigneeStr) ? eventAssigneeStr : eventAssigneeStr.split(',').map(s=>s.trim());
-                        if (!eAssignees.includes(person) && !eAssignees.includes('Everyone')) return false;
+                        if (isMultiDay(e)) {
+                            const eStart = parsePBDate(e.start || e.date);
+                            eStart.setHours(0,0,0,0);
+                            const eEnd = parsePBDate(e.end);
+                            eEnd.setHours(23,59,59,999);
+                            
+                            const eventAssigneeStr = e.assignee || e.assigned_to || '';
+                            const eAssignees = Array.isArray(eventAssigneeStr) ? eventAssigneeStr : eventAssigneeStr.split(',').map(s=>s.trim());
+                            if (!eAssignees.includes(person) && !eAssignees.includes('Everyone')) return false;
 
-                        const eStart = new Date(e.start || e.date);
-                        eStart.setHours(0,0,0,0);
-                        const eEnd = new Date(e.end);
-                        eEnd.setHours(23,59,59,999);
-                        
-                        return targetDate >= eStart && targetDate <= eEnd;
+                            return targetDate >= eStart && targetDate <= eEnd;
+                        }
+                        return false;
                     });
 
                     if (isBusy && !parents.some(p => p.name === person)) {
