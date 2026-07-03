@@ -354,17 +354,36 @@ export function useChores(groupBy) {
         const assignedProfiles = assignedIds.map(id => profiles.find(p => p.name === id || p.id === id)).filter(Boolean);
         const newStatus = !currentStatus;
 
+        // Keep track for rollback if needed
+        const xpChanges = {};
+        const baseXP = (chore.xp_reward !== undefined && chore.xp_reward !== null) ? chore.xp_reward : 10;
+
         try {
-            // Optimistically update UI immediately
+            // Optimistically update chores UI immediately
             setChores(prev => prev.map(c => c.id === choreId ? { ...c, is_completed: newStatus } : c));
+
+            // Optimistically update profiles UI immediately
+            if (assignedProfiles.length > 0 && !isCovered) {
+                setProfiles(prev => prev.map(p => {
+                    if (assignedProfiles.find(ap => ap.id === p.id)) {
+                        const isOp = p.is_op || todayHoliday !== null; 
+                        const earnedXP = isOp ? Math.floor(baseXP * 1.5) : baseXP;
+                        const newBalance = newStatus 
+                            ? (p.xp_balance || 0) + earnedXP 
+                            : Math.max(0, (p.xp_balance || 0) - earnedXP);
+                        
+                        xpChanges[p.id] = { xp_balance: p.xp_balance, is_op: p.is_op };
+                        return { ...p, xp_balance: newBalance, is_op: newBalance >= 1000 };
+                    }
+                    return p;
+                }));
+            }
 
             // 1. Always update the chore status first
             await pb.collection('chores').update(choreId, { is_completed: newStatus });
 
             // 2. Update XP if a profile exists and we are not covered
             if (assignedProfiles.length > 0 && !isCovered) {
-                const baseXP = chore.xp_reward || 10;
-
                 await Promise.all(assignedProfiles.map(async (profile) => {
                     // Fetch the latest profile to prevent race conditions from rapid toggling
                     const latestProfile = await pb.collection('profiles').getOne(profile.id);
@@ -386,6 +405,14 @@ export function useChores(groupBy) {
         } catch (err) {
             // Revert optimistic update on failure
             setChores(prev => prev.map(c => c.id === choreId ? { ...c, is_completed: currentStatus } : c));
+            if (Object.keys(xpChanges).length > 0) {
+                setProfiles(prev => prev.map(p => {
+                    if (xpChanges[p.id]) {
+                        return { ...p, ...xpChanges[p.id] };
+                    }
+                    return p;
+                }));
+            }
             console.error("Update failed:", err);
         }
     };
