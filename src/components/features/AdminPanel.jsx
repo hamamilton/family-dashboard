@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Plus, Trash2, Edit2, Save, LogOut, ChevronDown, ChevronUp, Loader2, Shield } from 'lucide-react';
+import { X, Plus, Trash2, Edit2, Save, LogOut, ChevronDown, ChevronUp, Loader2, Shield, FastForward } from 'lucide-react';
 import { useAdmin } from '../../hooks/useAdmin';
 
 const PB_URL = 'https://hamilton-family-db.fly.dev';
@@ -370,6 +370,12 @@ export function AdminPanel({ isOpen, onClose }) {
         }
     };
 
+    const handleSkip = async (id) => {
+        if (!confirm('Skip this chore for today? (It will be marked as complete without giving XP)')) return;
+        await adminRequest(`/api/collections/chores/records/${id}`, 'PATCH', { is_completed: true });
+        await loadData();
+    };
+
     const handleDelete = async (id) => {
         if (!confirm('Delete this chore?')) return;
         await adminRequest(`/api/collections/chores/records/${id}`, 'DELETE');
@@ -479,6 +485,13 @@ export function AdminPanel({ isOpen, onClose }) {
                                                 </div>
                                             </div>
                                             <div className="flex gap-2 flex-none">
+                                                {!chore.is_completed && (
+                                                    <button onClick={() => handleSkip(chore.id)}
+                                                        title="Skip for today (No XP)"
+                                                        className="p-1.5 text-slate-500 hover:text-fuchsia-400 transition-colors">
+                                                        <FastForward size={14} />
+                                                    </button>
+                                                )}
                                                 <button onClick={() => setEditingChore({
                                                     ...chore,
                                                     due_dates: Array.isArray(chore.due_dates) ? chore.due_dates : [],
