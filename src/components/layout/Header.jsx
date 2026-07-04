@@ -12,7 +12,7 @@ export function Header({ isDarkMode, childrenProfiles = [], profiles = [], isMob
                 >
                     {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
                 </button>
-                <h1 className="text-xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-fuchsia-500 to-amber-400">
+                <h1 className="text-xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-cyan-600 via-fuchsia-600 to-amber-600 dark:from-cyan-400 dark:via-fuchsia-500 dark:to-amber-400">
                     FAMILY HUB
                 </h1>
                 <span className="hidden md:block text-cyan-600 font-bold tracking-[0.2em] text-[10px] border-l border-[#444444] pl-3">
@@ -29,8 +29,8 @@ export function Header({ isDarkMode, childrenProfiles = [], profiles = [], isMob
                             className="flex flex-col px-3 py-1 child-xp-badge shrink-0"
                             style={{ clipPath: 'polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px)' }}
                         >
-                            <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-cyan-400 leading-none">{child.name}</span>
-                            <span className="text-sm font-black text-white leading-none">{child.xp_balance || 0} <span className="text-[9px] text-fuchsia-500">XP</span></span>
+                            <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-cyan-700 dark:text-cyan-400 leading-none">{child.name}</span>
+                            <span className="text-sm font-black text-slate-800 dark:text-white leading-none">{child.xp_balance || 0} <span className="text-[9px] text-fuchsia-700 dark:text-fuchsia-500">XP</span></span>
                         </div>
                     ))
                 ) : (

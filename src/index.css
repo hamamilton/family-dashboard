@@ -221,10 +221,6 @@ code {
   border-color: #a5b4fc;
 }
 
-:root:not(.dark) .child-xp-badge span {
-  color: #4f46e5;
-}
-
 /* ============================================
    SIDEBAR
    ============================================ */
@@ -353,6 +349,9 @@ body.theme-ios .app-root {
   background-image: none;
   background-color: #1c1c1e;
 }
+:root:not(.dark) body.theme-ios .app-root {
+  background-color: #f2f2f7;
+}
 
 body.theme-ios .page-card {
   border-radius: var(--card-radius);
@@ -361,12 +360,19 @@ body.theme-ios .page-card {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
 }
+:root:not(.dark) body.theme-ios .page-card {
+  background: rgba(255,255,255,0.85);
+  border-color: rgba(0,0,0,0.08);
+}
 
 body.theme-ios header {
   border-radius: 0;
   background: rgba(28,28,30,0.85) !important;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+}
+:root:not(.dark) body.theme-ios header {
+  background: rgba(255,255,255,0.85) !important;
 }
 
 body.theme-ios * {
@@ -398,6 +404,9 @@ body.theme-android .app-root {
   background-image: none;
   background-color: #141218;
 }
+:root:not(.dark) body.theme-android .app-root {
+  background-color: #fdfcff;
+}
 
 body.theme-android .page-card {
   border-radius: var(--card-radius);
@@ -406,10 +415,18 @@ body.theme-android .page-card {
   box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 4px 8px rgba(0,0,0,0.15);
   padding: 12px;
 }
+:root:not(.dark) body.theme-android .page-card {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(121,116,126,0.15);
+}
 
 body.theme-android header {
   background: #1C1B1F !important;
   border-color: rgba(202,196,208,0.15);
+}
+:root:not(.dark) body.theme-android header {
+  background: #fdfcff !important;
+  border-color: rgba(121,116,126,0.15);
 }
 
 body.theme-android * {
