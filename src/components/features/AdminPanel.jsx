@@ -251,7 +251,8 @@ function ProfileManager({ profiles, adminRequest, onRefresh }) {
         const newBalance = isAdd ? profile.xp_balance + val : profile.xp_balance - val;
         try {
             await adminRequest(`/api/collections/profiles/records/${profile.id}`, 'PATCH', {
-                xp_balance: Math.max(0, newBalance)
+                xp_balance: Math.max(0, newBalance),
+                is_op: Math.max(0, newBalance) >= 100
             });
             onRefresh();
             setXpValues(prev => ({ ...prev, [profile.id]: '' }));

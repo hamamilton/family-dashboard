@@ -1,6 +1,6 @@
 import { Zap, Terminal } from 'lucide-react';
 
-export function RewardBar({ profile, goalXP = 1000 }) {
+export function RewardBar({ profile, goalXP = 100 }) {
     const isOP = profile?.is_op || false;
     const currentXP = profile?.xp_balance || 0;
     const name = profile?.name || 'Player';

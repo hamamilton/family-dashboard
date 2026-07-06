@@ -11,7 +11,7 @@ const PROFILE_COLORS = [
 function AgentCard({ profile, chores, colorScheme, birthdayProfiles = [] }) {
     const isOP = profile?.is_op || false;
     const currentXP = profile?.xp_balance || 0;
-    const goalXP = 1000;
+    const goalXP = 100;
     const progress = Math.min((currentXP / goalXP) * 100, 100);
     const isBirthday = birthdayProfiles.includes(profile.name);
 

@@ -173,6 +173,7 @@ export function useChores(groupBy) {
                     await Promise.all(profilesToReset.map(async (p) => {
                         await pb.collection('profiles').update(p.id, {
                             xp_balance: 0,
+                            is_op: false,
                             last_reset_month: currentMonthStr
                         });
                     }));
@@ -183,7 +184,7 @@ export function useChores(groupBy) {
 
             // 1. Reset Recurring Chores
             const choresToReset = rawChoreList.filter(c => {
-                if (!c.is_completed || !c.frequency || c.frequency === 'none') return false;
+                if (!(c.is_completed || c.is_skipped) || !c.frequency || c.frequency === 'none') return false;
                 const updatedStr = getLocalYYYYMMDD(parsePBDate(c.updated));
                 if (updatedStr === todayStr) return false; // Don't reset if just checked off today
 
@@ -211,7 +212,7 @@ export function useChores(groupBy) {
 
             if (choresToReset.length > 0) {
                 await Promise.all(choresToReset.map(async (c, index) => {
-                    let updateData = { is_completed: false };
+                    let updateData = { is_completed: false, is_skipped: false };
                     let pool = [];
                     if (Array.isArray(c.round_robin_pool) && c.round_robin_pool.length > 0) {
                         pool = c.round_robin_pool.map(val => {
@@ -373,7 +374,7 @@ export function useChores(groupBy) {
                             : Math.max(0, (p.xp_balance || 0) - earnedXP);
                         
                         xpChanges[p.id] = { xp_balance: p.xp_balance, is_op: p.is_op };
-                        return { ...p, xp_balance: newBalance, is_op: newBalance >= 1000 };
+                        return { ...p, xp_balance: newBalance, is_op: newBalance >= 100 };
                     }
                     return p;
                 }));
@@ -396,7 +397,7 @@ export function useChores(groupBy) {
 
                     return pb.collection('profiles').update(profile.id, {
                         xp_balance: newBalance,
-                        is_op: newBalance >= 1000
+                        is_op: newBalance >= 100
                     });
                 }));
             }
@@ -414,6 +415,22 @@ export function useChores(groupBy) {
                 }));
             }
             console.error("Update failed:", err);
+        }
+    };
+
+    const skipChore = async (choreId, currentSkipStatus) => {
+        const chore = chores.find(c => c.id === choreId);
+        const newStatus = !currentSkipStatus;
+
+        try {
+            // Optimistically update UI immediately
+            setChores(prev => prev.map(c => c.id === choreId ? { ...c, is_skipped: newStatus } : c));
+            await pb.collection('chores').update(choreId, { is_skipped: newStatus });
+            console.log(`Success: ${chore.chore_name} skipped toggled to ${newStatus}`);
+        } catch (err) {
+            // Revert optimistic update on failure
+            setChores(prev => prev.map(c => c.id === choreId ? { ...c, is_skipped: currentSkipStatus } : c));
+            console.error("Skip update failed:", err);
         }
     };
 
@@ -576,6 +593,7 @@ export function useChores(groupBy) {
                     assigned_to: finalAssignee,
                     day_due: displayDay,
                     is_completed: i === 0 ? c.is_completed : false,
+                    is_skipped: i === 0 ? c.is_skipped : false,
                     is_future: i > 0,
                     sort_order: i
                 });
@@ -611,5 +629,5 @@ export function useChores(groupBy) {
         return orderA - orderB;
     });
 
-    return { chores, profiles, sortedGroupEntries, loading, toggleChore, rotateAssignee, todayHoliday, birthdayProfiles, fetchError };
+    return { chores, profiles, sortedGroupEntries, loading, toggleChore, skipChore, rotateAssignee, todayHoliday, birthdayProfiles, fetchError };
 }

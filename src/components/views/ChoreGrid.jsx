@@ -3,7 +3,7 @@ import { GripHorizontal, LayoutGrid, List, AlignJustify, Minimize } from 'lucide
 import { RewardBar } from '../features/RewardBar';
 import { ChoreCard } from '../features/ChoreCard';
 
-export function ChoreGrid({ sortedGroupEntries, profiles, groupBy, toggleChore, rotateAssignee, birthdayProfiles = [] }) {
+export function ChoreGrid({ sortedGroupEntries, profiles, groupBy, toggleChore, skipChore, rotateAssignee, birthdayProfiles = [] }) {
     const [cardLayout, setCardLayout] = useState(() => {
         if (typeof window !== 'undefined') {
             return localStorage.getItem('choreCardLayout') || 'original';
@@ -69,6 +69,8 @@ export function ChoreGrid({ sortedGroupEntries, profiles, groupBy, toggleChore, 
                 return (
                     <section key={groupName} className="animate-in fade-in slide-in-from-bottom-4 duration-700">
 
+                        {profile && <RewardBar profile={profile} />}
+
                         {/* CATEGORY HEADER */}
                         <div className="flex items-center gap-6 mb-8 font-mono">
                             <h2 className="text-4xl font-black uppercase tracking-widest text-cyan-600 dark:text-cyan-400 drop-shadow-sm dark:drop-shadow-[0_0_10px_rgba(34,211,238,0.6)]">
@@ -105,6 +107,7 @@ export function ChoreGrid({ sortedGroupEntries, profiles, groupBy, toggleChore, 
                                         key={chore.id}
                                         chore={chore}
                                         onToggle={toggleChore}
+                                        onSkip={skipChore}
                                         onRotate={rotateAssignee}
                                         layout={cardLayout}
                                     />

@@ -71,7 +71,7 @@ function App() {
 
   const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
 
-  const { sortedGroupEntries, loading, toggleChore, rotateAssignee, chores, profiles, todayHoliday, birthdayProfiles, fetchError } = useChores(groupBy);
+  const { sortedGroupEntries, loading, toggleChore, skipChore, rotateAssignee, chores, profiles, todayHoliday, birthdayProfiles, fetchError } = useChores(groupBy);
   const { isIdle, setIsIdle } = useInactivity();
 
   const children = profiles.filter(p => !p.is_parent);
@@ -151,6 +151,7 @@ function App() {
                       profiles={profiles}
                       groupBy={groupBy}
                       toggleChore={toggleChore}
+                      skipChore={skipChore}
                       rotateAssignee={rotateAssignee}
                       birthdayProfiles={birthdayProfiles}
                     />
