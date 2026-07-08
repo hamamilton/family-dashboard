@@ -166,13 +166,13 @@ function ChoreForm({ chore, profiles, onSave, onCancel, saving }) {
             <div>
                 <label className="block text-[10px] font-bold uppercase tracking-widest text-cyan-600 mb-1">Frequency</label>
                 <div className="flex gap-2">
-                    {['daily', 'weekly', 'monthly'].map(f => (
+                    {['daily', 'weekly', 'monthly', 'none'].map(f => (
                         <button key={f} type="button"
                             onClick={() => setForm(prev => ({ ...prev, frequency: f, due_dates: [] }))}
                             className={`flex-1 py-2 text-xs font-black uppercase tracking-wider border transition-colors ${form.frequency === f
                                 ? 'border-cyan-400 bg-cyan-400/10 text-cyan-400'
                                 : 'border-slate-700 text-slate-500 hover:border-slate-500'}`}>
-                            {f}
+                            {f === 'none' ? 'one-off' : f}
                         </button>
                     ))}
                 </div>
@@ -481,7 +481,9 @@ export function AdminPanel({ isOpen, onClose }) {
                                                             : chore.expand?.assigned_to?.name || 
                                                               (Array.isArray(chore.assigned_to) ? chore.assigned_to.join(', ') : chore.assigned_to) || '—'}
                                                     </span>
-                                                    <span className="text-[10px] text-cyan-700 uppercase">{chore.frequency}</span>
+                                                    <span className="text-[10px] text-cyan-700 uppercase">
+                                                        {chore.frequency === 'none' ? 'one-off' : chore.frequency}
+                                                    </span>
                                                     <span className="text-[10px] text-fuchsia-700">+{chore.xp_reward} XP</span>
                                                 </div>
                                             </div>

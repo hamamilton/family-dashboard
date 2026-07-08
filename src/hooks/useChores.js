@@ -314,8 +314,7 @@ export function useChores(groupBy) {
                 const updatedStr = getLocalYYYYMMDD(parsePBDate(c.updated));
                 if (updatedStr === todayStr) return true; 
                 
-                if (c.frequency === 'monthly' || c.frequency === 'weekly') return false;
-                return true; 
+                return false; 
             });
 
             setChores(visibleChores);
