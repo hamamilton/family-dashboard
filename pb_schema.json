@@ -28,7 +28,7 @@
         "required": false,
         "options": {
           "maxSelect": 1,
-          "values": ["daily", "weekly", "monthly"]
+          "values": ["daily", "weekly", "monthly", "none"]
         }
       },
       {
