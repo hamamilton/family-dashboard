@@ -78,7 +78,7 @@ function isAllDayEvent(event) {
     return false;
 }
 
-const CustomAgendaView = ({ events, date, localizer, length = 30, profiles }) => {
+const CustomAgendaView = ({ events, date, localizer, length = 30, profiles, onSelectEvent }) => {
     const start = new Date(date);
     start.setHours(0, 0, 0, 0);
 
@@ -89,20 +89,17 @@ const CustomAgendaView = ({ events, date, localizer, length = 30, profiles }) =>
     const inRange = events.filter(e => {
         const eStart = new Date(e.start);
         const eEnd = new Date(e.end);
-        // Ensure event overlaps with our 30-day window
         return eStart <= end && eEnd >= start;
     });
 
     inRange.sort((a, b) => new Date(a.start) - new Date(b.start));
 
-    // Group by Day
     const grouped = {};
     inRange.forEach(event => {
         const eStart = new Date(event.start);
         eStart.setHours(0, 0, 0, 0);
 
         const eEnd = new Date(event.end);
-        // If the event ends exactly at midnight, subtract 1 ms so it doesn't spill into the next day unnecessarily
         if (eEnd.getHours() === 0 && eEnd.getMinutes() === 0 && eEnd.getSeconds() === 0 && eEnd > eStart) {
             eEnd.setMilliseconds(eEnd.getMilliseconds() - 1);
         }
@@ -122,14 +119,11 @@ const CustomAgendaView = ({ events, date, localizer, length = 30, profiles }) =>
                 }
                 
                 if (isAllDayEvent(event)) {
-                    // Prevent duplicates if same event happens to be processed multiple times?
-                    // Not strictly needed since it's a single pass per event, but good practice.
                     grouped[dayKey].allDay.push(event);
                 } else {
                     grouped[dayKey].timed.push(event);
                 }
             }
-            // Move to next day
             current.setDate(current.getDate() + 1);
         }
     });
@@ -153,20 +147,22 @@ const CustomAgendaView = ({ events, date, localizer, length = 30, profiles }) =>
                 
                 return (
                     <div key={key} className="flex flex-col border border-slate-200 dark:border-cyan-900/50 rounded-xl overflow-hidden bg-white dark:bg-black shadow-sm">
-                        {/* Day Header */}
                         <div className="bg-slate-100 dark:bg-slate-900/50 p-3 border-b border-slate-200 dark:border-cyan-900/50 flex items-baseline gap-2">
                             <h3 className="text-lg font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-widest">{dayName}</h3>
                             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{dateNum}</span>
                         </div>
                         
                         <div className="p-3 flex flex-col gap-4">
-                            {/* All Day Events (Clustered) */}
                             {group.allDay.length > 0 && (
                                 <div className="flex flex-col gap-2 border-l-4 border-fuchsia-500 pl-3">
                                     <div className="text-[10px] font-black text-fuchsia-500 uppercase tracking-widest mb-1">All Day</div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                                         {group.allDay.map(evt => (
-                                            <div key={evt.id} className="h-16">
+                                            <div 
+                                                key={evt.id} 
+                                                className="h-16 cursor-pointer hover:opacity-90 transition-opacity active:scale-[0.98]"
+                                                onClick={() => onSelectEvent && onSelectEvent(evt)}
+                                            >
                                                 <EventComponent event={evt} profiles={profiles} />
                                             </div>
                                         ))}
@@ -174,7 +170,6 @@ const CustomAgendaView = ({ events, date, localizer, length = 30, profiles }) =>
                                 </div>
                             )}
                             
-                            {/* Timed Events */}
                             {group.timed.length > 0 && (
                                 <div className="flex flex-col gap-3">
                                     {group.timed.map(evt => (
@@ -187,7 +182,10 @@ const CustomAgendaView = ({ events, date, localizer, length = 30, profiles }) =>
                                                     to {localizer.format(new Date(evt.end), 'h:mm a')}
                                                 </span>
                                             </div>
-                                            <div className="flex-1 min-h-[4rem]">
+                                            <div 
+                                                className="flex-1 min-h-[4rem] cursor-pointer hover:opacity-90 transition-opacity active:scale-[0.98]"
+                                                onClick={() => onSelectEvent && onSelectEvent(evt)}
+                                            >
                                                 <EventComponent event={evt} profiles={profiles} />
                                             </div>
                                         </div>
@@ -223,7 +221,9 @@ CustomAgendaView.navigate = (date, action, { length = 30 }) => {
     return newDate;
 };
 
-export function CalendarView({ profiles = [] }) {
+import { useCallback, useMemo } from 'react';
+
+export function CalendarView({ profiles = [], isScreensaver = false }) {
     const { events, subscriptions, loading, addEvent, addEvents, deleteEvent, updateEvent, addSubscription, removeSubscription } = useCalendar();
     
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -261,7 +261,7 @@ export function CalendarView({ profiles = [] }) {
         setIsModalOpen(true);
     };
 
-    const handleSelectEvent = (event) => {
+    const handleSelectEvent = useCallback((event) => {
         const meta = getEventMetadata(event);
         const isRecurring = !!meta?.seriesId;
 
@@ -280,7 +280,22 @@ export function CalendarView({ profiles = [] }) {
             location: meta?.location || ''
         });
         setIsModalOpen(true);
-    };
+    }, []);
+
+    const calendarViews = useMemo(() => {
+        if (isScreensaver) return ['month', 'week', 'day', 'agenda'];
+        
+        const CustomAgenda = (props) => <CustomAgendaView {...props} profiles={profiles} onSelectEvent={handleSelectEvent} />;
+        CustomAgenda.title = CustomAgendaView.title;
+        CustomAgenda.navigate = CustomAgendaView.navigate;
+        
+        return {
+            month: true,
+            week: true,
+            day: true,
+            agenda: CustomAgenda
+        };
+    }, [isScreensaver, profiles, handleSelectEvent]);
 
     const handleFileUpload = async (e) => {
         const file = e.target.files[0];
@@ -516,7 +531,7 @@ export function CalendarView({ profiles = [] }) {
     }
 
     return (
-        <div className="animate-in fade-in zoom-in-95 duration-700 font-mono relative flex flex-col h-full p-6">
+        <div className={`animate-in fade-in zoom-in-95 duration-700 font-mono relative flex flex-col h-full p-6`}>
 
             <div className="flex items-center gap-6 mb-8 flex-none">
                 <GripHorizontal size={24} className="drag-handle cursor-grab active:cursor-grabbing text-slate-400 hover:text-cyan-400 transition-colors flex-none" />
@@ -524,6 +539,7 @@ export function CalendarView({ profiles = [] }) {
                     &gt; Master Schedule
                 </h2>
                 <div className="h-[2px] flex-1 bg-gradient-to-r from-cyan-400 via-fuchsia-500 to-transparent shadow-sm dark:shadow-[0_0_10px_rgba(192,38,211,0.5)]"></div>
+                {!isScreensaver && (
                 <div className="flex gap-2 items-center">
                     <button 
                         onClick={() => {
@@ -578,9 +594,10 @@ export function CalendarView({ profiles = [] }) {
                         </span>
                     </div>
                 </div>
+                )}
             </div>
 
-            <div className="flex-1 min-h-0 bg-white dark:bg-black p-6 border-2 border-slate-300 dark:border-cyan-900 shadow-lg dark:shadow-[0_0_30px_rgba(34,211,238,0.1)] custom-calendar-wrapper">
+            <div className={`flex-1 min-h-0 bg-white dark:bg-black p-6 border-2 border-slate-300 dark:border-cyan-900 shadow-lg dark:shadow-[0_0_30px_rgba(34,211,238,0.1)] custom-calendar-wrapper`}>
                 <Calendar
                     localizer={localizer}
                     events={events}
@@ -591,12 +608,7 @@ export function CalendarView({ profiles = [] }) {
                     components={{
                         event: (props) => <EventComponent {...props} profiles={profiles} />
                     }}
-                    views={{
-                        month: true,
-                        week: true,
-                        day: true,
-                        agenda: CustomAgendaView
-                    }}
+                    views={calendarViews}
                     selectable={true}
                     onSelectSlot={handleSelectSlot}
                     onSelectEvent={handleSelectEvent}

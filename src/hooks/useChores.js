@@ -70,13 +70,27 @@ export function getDaysLate(chore) {
 
 export function isChoreOverdue(chore) {
     if (chore.is_completed) return false;
-    if (!chore.frequency || chore.frequency === 'none') return false; 
     if (chore.frequency === 'daily') return false; // Daily chores are never shown as overdue in the UI
     
     const now = new Date();
     now.setHours(0,0,0,0);
     const createdDate = parsePBDate(chore.created);
     
+    if (!chore.frequency || chore.frequency === 'none') {
+        if (Array.isArray(chore.due_dates) && chore.due_dates.length > 0 && chore.due_dates[0]) {
+            const parts = chore.due_dates[0].split('-');
+            let due;
+            if (parts.length === 3) {
+                due = new Date(parts[0], parts[1] - 1, parts[2]);
+            } else {
+                due = parsePBDate(chore.due_dates[0]);
+            }
+            due.setHours(0,0,0,0);
+            return now.getTime() > due.getTime();
+        }
+        return false;
+    }
+
     if (chore.frequency === 'weekly' || chore.frequency === 'monthly') {
         const minDiff = getDaysLate(chore); 
         if (minDiff === 0) return false; // Due today
@@ -96,12 +110,26 @@ export function isChoreOverdue(chore) {
 
 export function shouldPenalize(chore) {
     if (chore.is_completed) return false;
-    if (!chore.frequency || chore.frequency === 'none') return false; 
     
     const now = new Date();
     now.setHours(0,0,0,0);
     const createdDate = parsePBDate(chore.created);
     
+    if (!chore.frequency || chore.frequency === 'none') {
+        if (Array.isArray(chore.due_dates) && chore.due_dates.length > 0 && chore.due_dates[0]) {
+            const parts = chore.due_dates[0].split('-');
+            let due;
+            if (parts.length === 3) {
+                due = new Date(parts[0], parts[1] - 1, parts[2]);
+            } else {
+                due = parsePBDate(chore.due_dates[0]);
+            }
+            due.setHours(0,0,0,0);
+            return now.getTime() > due.getTime();
+        }
+        return false;
+    }
+
     if (chore.frequency === 'daily') {
         return createdDate < now; // If it was created before today and isn't completed, it missed yesterday
     }
@@ -492,7 +520,7 @@ export function useChores(groupBy) {
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
         const todayIdx = new Date().getDay();
 
-        if (c.frequency === 'daily' || c.frequency === 'weekly') {
+        if (c.frequency === 'daily' || c.frequency === 'weekly' || ((c.frequency === 'none' || !c.frequency) && Array.isArray(c.due_dates) && c.due_dates.length > 0 && c.due_dates[0])) {
             let pool = [];
             if (Array.isArray(c.round_robin_pool) && c.round_robin_pool.length > 0) {
                 pool = c.round_robin_pool.map(val => {
@@ -512,14 +540,23 @@ export function useChores(groupBy) {
             const currentIdx = pool.indexOf(firstAssignedName) === -1 ? 0 : pool.indexOf(firstAssignedName);
             const projected = [];
             let dueDays = [];
+            let oneOffDateObj = null;
 
             if (c.frequency === 'weekly') {
                 if (Array.isArray(c.due_dates)) dueDays = c.due_dates.map(d => String(d).trim());
                 else if (typeof c.due_dates === 'string') dueDays = c.due_dates.split(',').map(d => d.trim());
+            } else if (c.frequency === 'none' || !c.frequency) {
+                const parts = c.due_dates[0].split('-'); // YYYY-MM-DD
+                if (parts.length === 3) {
+                    oneOffDateObj = new Date(parts[0], parts[1] - 1, parts[2]);
+                } else {
+                    oneOffDateObj = parsePBDate(c.due_dates[0]);
+                }
+                oneOffDateObj.setHours(0,0,0,0);
             }
 
             let assignmentCounter = 0;
-            const overdue = isChoreOverdue(c);
+            const overdue = isChoreOverdue(c) || (oneOffDateObj && oneOffDateObj.getTime() < new Date().setHours(0,0,0,0) && !c.is_completed);
             
             const parents = profiles.filter(p => p.is_parent);
             const parentName = parents.length > 0 ? parents[0].name : 'Mom/Dad';
@@ -538,6 +575,16 @@ export function useChores(groupBy) {
                         // let it pass
                     } else {
                         continue;
+                    }
+                }
+                
+                if ((c.frequency === 'none' || !c.frequency) && oneOffDateObj) {
+                    if (targetDate.getTime() !== oneOffDateObj.getTime()) {
+                        if (overdue && i === 0) {
+                            // let it pass to today
+                        } else {
+                            continue;
+                        }
                     }
                 }
 
@@ -605,7 +652,13 @@ export function useChores(groupBy) {
 
         let day_due = 'Uncategorized';
         if (c.frequency === 'monthly') day_due = 'Monthly';
-        else if (c.frequency === 'none' || !c.frequency) day_due = 'One-off Tasks';
+        else if (c.frequency === 'none' || !c.frequency) {
+            if (c.due_dates && c.due_dates.length > 0) {
+                day_due = 'Upcoming One-off Tasks';
+            } else {
+                day_due = 'One-off Tasks';
+            }
+        }
 
         return [{
             ...c,

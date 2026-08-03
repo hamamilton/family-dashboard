@@ -62,7 +62,8 @@ export function useSideQuest(profiles = []) {
             // 1. Try to find today's quest
             const records = await pb.collection('side_quests').getList(1, 1, {
                 filter: `date = "${today}"`,
-                expand: 'completed_by'
+                expand: 'completed_by',
+                requestKey: null
             });
 
             let newRawQuest = null;

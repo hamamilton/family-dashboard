@@ -26,7 +26,7 @@ export function useCalendar() {
 
     const fetchEvents = useCallback(async () => {
         try {
-            const records = await pb.collection('events').getFullList({ sort: 'date' });
+            const records = await pb.collection('events').getFullList({ sort: 'date', requestKey: null });
             
             const subRecords = records.filter(r => r.title === '[ICAL_SUBSCRIPTION]');
             const normalRecords = records.filter(r => r.title !== '[ICAL_SUBSCRIPTION]');

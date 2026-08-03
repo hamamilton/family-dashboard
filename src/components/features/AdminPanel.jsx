@@ -187,8 +187,8 @@ function ChoreForm({ chore, profiles, onSave, onCancel, saving }) {
                 <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-widest">How long a task remains assigned to a profile before rotating</p>
             </div>
 
-            {/* Due Dates (weekly/monthly) */}
-            {dueDateOptions.length > 0 && (
+            {/* Due Dates (weekly/monthly/one-off) */}
+            {dueDateOptions.length > 0 ? (
                 <div>
                     <label className="block text-[10px] font-bold uppercase tracking-widest text-cyan-600 mb-1">
                         {form.frequency === 'weekly' ? 'Due Days' : 'Due Dates'}
@@ -204,6 +204,18 @@ function ChoreForm({ chore, profiles, onSave, onCancel, saving }) {
                             </button>
                         ))}
                     </div>
+                </div>
+            ) : form.frequency === 'none' && (
+                <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-cyan-600 mb-1">
+                        Due Date
+                    </label>
+                    <input 
+                        type="date"
+                        value={form.due_dates?.[0] || ''}
+                        onChange={e => setForm(f => ({ ...f, due_dates: e.target.value ? [e.target.value] : [] }))}
+                        className="w-full bg-black border border-slate-700 focus:border-cyan-400 p-2.5 text-white outline-none transition-colors"
+                    />
                 </div>
             )}
 
