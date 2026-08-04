@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 
 export function useInactivity(timeoutMs = 600000) {
-    const [isIdle, setIsIdle] = useState(true);
+    const [isIdle, setIsIdle] = useState(false);
 
     useEffect(() => {
         let timeoutId;
@@ -12,7 +12,7 @@ export function useInactivity(timeoutMs = 600000) {
             timeoutId = setTimeout(() => setIsIdle(true), timeoutMs);
         };
 
-        // resetTimer(); // Removed for testing so it starts idle
+        resetTimer(); 
 
         // Listen for activity events
         const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'];
