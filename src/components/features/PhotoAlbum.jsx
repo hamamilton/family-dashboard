@@ -9,22 +9,23 @@ export function PhotoAlbum() {
     const fileInputRef = useRef(null);
 
     const handleFileChange = async (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            try {
-                const options = {
-                    maxSizeMB: 0.5,
-                    maxWidthOrHeight: 1920,
-                    useWebWorker: true,
-                };
-                const compressedFile = await imageCompression(file, options);
-                await addPhoto(compressedFile);
-                setCurrentIndex(0); // Go to newest photo
-            } catch (error) {
-                console.error("Compression error:", error);
-                await addPhoto(file); // Fallback to original
-                setCurrentIndex(0);
+        const files = Array.from(e.target.files);
+        if (files.length > 0) {
+            for (const file of files) {
+                try {
+                    const options = {
+                        maxSizeMB: 0.5,
+                        maxWidthOrHeight: 1920,
+                        useWebWorker: true,
+                    };
+                    const compressedFile = await imageCompression(file, options);
+                    await addPhoto(compressedFile);
+                } catch (error) {
+                    console.error("Compression error:", error);
+                    await addPhoto(file); // Fallback to original
+                }
             }
+            setCurrentIndex(0); // Go to newest photo
         }
         // Reset input
         e.target.value = null;
@@ -71,6 +72,7 @@ export function PhotoAlbum() {
                     <input 
                         type="file" 
                         accept="image/*" 
+                        multiple
                         ref={fileInputRef} 
                         onChange={handleFileChange} 
                         className="hidden" 
