@@ -1,57 +1,93 @@
 import { useState, useEffect } from 'react';
 import { usePhotos } from '../../hooks/usePhotos';
+import { useDadJoke } from '../../hooks/useDadJoke';
 import { Star } from 'lucide-react';
 import { SideQuest } from '../features/SideQuest';
 import { CalendarView } from '../views/CalendarView';
 
 export function Screensaver({ onWake, childrenProfiles, profiles }) {
     const { photos } = usePhotos();
+    const { fetchJoke } = useDadJoke();
     const [currentTime, setCurrentTime] = useState(new Date());
-    const [visiblePhotos, setVisiblePhotos] = useState([]);
+    const [visibleItems, setVisibleItems] = useState([]);
+    const [particles, setParticles] = useState([]);
+
+    // Generate background particles once
+    useEffect(() => {
+        const p = Array.from({ length: 25 }).map((_, i) => ({
+            id: i,
+            left: Math.random() * 100 + '%',
+            size: Math.random() * 15 + 5 + 'px',
+            animationDuration: Math.random() * 25 + 15 + 's',
+            animationDelay: Math.random() * -20 + 's', // negative to start immediately spread out
+            opacity: Math.random() * 0.4 + 0.1
+        }));
+        setParticles(p);
+    }, []);
 
     // Update time every minute
     useEffect(() => {
         const timerId = setInterval(() => {
             setCurrentTime(new Date());
-        }, 60000); // 1 minute
+        }, 60000);
         return () => clearInterval(timerId);
     }, []);
 
-    // Deal a new card every 8 seconds
+    // Deal a new card or joke every 8 seconds
     useEffect(() => {
         if (!photos || photos.length === 0) return;
         
-        const addPhoto = (index) => {
-            const photo = photos[index];
-            const rotation = Math.floor(Math.random() * 30) - 15; // -15 to +15 degrees
-            const xOffset = Math.floor(Math.random() * 150) - 75; // reduced range for half screen
+        let currentIndex = 0;
+        let itemCounter = 0;
+        
+        const addItem = async () => {
+            let isJoke = false;
+            let jokeText = '';
+            
+            itemCounter++;
+            if (itemCounter % 4 === 0) {
+                jokeText = await fetchJoke();
+                if (jokeText) {
+                    isJoke = true;
+                }
+            }
+
+            const rotation = Math.floor(Math.random() * 30) - 15;
+            const xOffset = Math.floor(Math.random() * 150) - 75;
             const yOffset = Math.floor(Math.random() * 100) - 50; 
             
-            setVisiblePhotos(prev => [...prev, {
-                ...photo,
+            const newItem = {
+                type: isJoke ? 'joke' : 'photo',
+                text: jokeText,
+                dataUrl: isJoke ? null : photos[currentIndex].dataUrl,
                 rotation,
                 xOffset,
                 yOffset,
-                key: `${photo.id}-${Date.now()}`
-            }]);
+                key: `item-${Date.now()}`,
+                color: isJoke ? ['bg-yellow-200', 'bg-cyan-200', 'bg-fuchsia-200'][Math.floor(Math.random() * 3)] : 'bg-white'
+            };
+            
+            setVisibleItems(prev => {
+                const newArr = [...prev, newItem];
+                // Keep max 4 items (rolling buffer)
+                if (newArr.length > 4) {
+                    return newArr.slice(newArr.length - 4);
+                }
+                return newArr;
+            });
+            
+            if (!isJoke) {
+                currentIndex++;
+                if (currentIndex >= photos.length) currentIndex = 0;
+            }
         };
 
-        let currentIndex = 0;
-        setVisiblePhotos([]); // reset on mount
-        addPhoto(0);
+        setVisibleItems([]);
+        addItem();
         
-        const photoInterval = setInterval(() => {
-            currentIndex++;
-            if (currentIndex >= photos.length) {
-                // Clear the stack and start over
-                setVisiblePhotos([]);
-                currentIndex = 0;
-            }
-            addPhoto(currentIndex);
-        }, 8000); // 8 seconds
-        
-        return () => clearInterval(photoInterval);
-    }, [photos]);
+        const interval = setInterval(addItem, 8000);
+        return () => clearInterval(interval);
+    }, [photos, fetchJoke]);
 
     const formattedTime = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const formattedDate = currentTime.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
@@ -69,29 +105,60 @@ export function Screensaver({ onWake, childrenProfiles, profiles }) {
                     <div className="absolute inset-0 bg-black/10 pointer-events-none z-[998]" />
                 </div>
                 
-                {/* Right Half: Photos */}
-                <div className="w-1/2 h-full relative overflow-hidden pointer-events-none flex items-center justify-center bg-slate-800">
-                    {visiblePhotos.map((photo, i) => (
+                {/* Right Half: Photos & Jokes */}
+                <div className="w-1/2 h-full relative overflow-hidden pointer-events-none flex items-center justify-center bg-slate-900">
+                    {/* Background Particles */}
+                    {particles.map(p => (
                         <div 
-                            key={photo.key}
-                            className="absolute shadow-2xl bg-white p-4 pb-12 rounded-sm pointer-events-none transition-transform duration-1000"
+                            key={p.id}
+                            className="particle"
                             style={{
-                                transform: `translate(${photo.xOffset}px, ${photo.yOffset}px) rotate(${photo.rotation}deg)`,
-                                zIndex: i,
-                                maxWidth: '80%',
-                                maxHeight: '80%'
+                                left: p.left,
+                                width: p.size,
+                                height: p.size,
+                                bottom: '-10%',
+                                animation: `drift-up ${p.animationDuration} linear infinite`,
+                                animationDelay: p.animationDelay,
+                                opacity: p.opacity
                             }}
-                        >
-                            <div className="animate-drop-in w-full h-full">
-                                <img 
-                                    src={photo.dataUrl} 
-                                    className="w-full h-full object-contain pointer-events-none" 
-                                    style={{ maxHeight: '50vh' }}
-                                    alt=""
-                                />
-                            </div>
-                        </div>
+                        />
                     ))}
+
+                    {visibleItems.map((item, i) => {
+                        // The oldest item fades out when there are 4 items
+                        const isFading = visibleItems.length === 4 && i === 0;
+                        
+                        return (
+                            <div 
+                                key={item.key}
+                                className={`absolute shadow-2xl p-4 ${item.type === 'photo' ? 'pb-12 bg-white' : `p-8 pb-8 ${item.color}`} rounded-sm pointer-events-none transition-all duration-[2000ms] ease-in-out ${isFading ? 'opacity-0 scale-90 translate-y-8' : 'opacity-100 scale-100'}`}
+                                style={{
+                                    transform: `translate(${item.xOffset}px, ${item.yOffset}px) rotate(${item.rotation}deg)`,
+                                    zIndex: i,
+                                    maxWidth: '80%',
+                                    maxHeight: '80%'
+                                }}
+                            >
+                                <div className="washi-tape"></div>
+                                <div className="animate-drop-in w-full h-full flex items-center justify-center overflow-hidden">
+                                    <div className="animate-ken-burns w-full h-full flex items-center justify-center">
+                                        {item.type === 'photo' ? (
+                                            <img 
+                                                src={item.dataUrl} 
+                                                className="w-full h-full object-contain pointer-events-none drop-shadow-md" 
+                                                style={{ maxHeight: '50vh' }}
+                                                alt=""
+                                            />
+                                        ) : (
+                                            <div className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-800 tracking-wide text-center leading-relaxed font-sans p-4" style={{ maxHeight: '50vh', maxWidth: '35vw' }}>
+                                                "{item.text}"
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
                     <div className="absolute inset-0 bg-black/10 pointer-events-none z-[998]" />
                 </div>
             </div>
