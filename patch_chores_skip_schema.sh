@@ -168,6 +168,16 @@ curl -s -X PATCH "$PB_URL/api/collections/chores" \
     "type": "bool",
     "required": false,
     "options": {}
+  },
+  {
+    "name": "one_off_date",
+    "type": "text",
+    "required": false,
+    "options": {
+      "min": null,
+      "max": null,
+      "pattern": ""
+    }
   }
 ]
   }'

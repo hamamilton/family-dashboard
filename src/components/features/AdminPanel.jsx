@@ -212,8 +212,8 @@ function ChoreForm({ chore, profiles, onSave, onCancel, saving }) {
                     </label>
                     <input 
                         type="date"
-                        value={form.due_dates?.[0] || ''}
-                        onChange={e => setForm(f => ({ ...f, due_dates: e.target.value ? [e.target.value] : [] }))}
+                        value={form.one_off_date || form.due_dates?.[0] || ''}
+                        onChange={e => setForm(f => ({ ...f, one_off_date: e.target.value, due_dates: [] }))}
                         className="w-full bg-black border border-slate-700 focus:border-cyan-400 p-2.5 text-white outline-none transition-colors"
                     />
                 </div>
@@ -353,6 +353,7 @@ export function AdminPanel({ isOpen, onClose }) {
                 is_completed: form.is_completed || false,
                 rotation_period: form.rotation_period || 7,
                 cannot_cover: form.cannot_cover || false,
+                one_off_date: form.one_off_date || "",
             };
 
             if (form.id) {
@@ -511,6 +512,7 @@ export function AdminPanel({ isOpen, onClose }) {
                                                     ...chore,
                                                     due_dates: Array.isArray(chore.due_dates) ? chore.due_dates : [],
                                                     round_robin_pool: Array.isArray(chore.round_robin_pool) ? chore.round_robin_pool : [],
+                                                    one_off_date: chore.one_off_date || "",
                                                 })}
                                                     className="p-1.5 text-slate-500 hover:text-cyan-400 transition-colors">
                                                     <Edit2 size={14} />

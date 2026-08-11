@@ -77,13 +77,14 @@ export function isChoreOverdue(chore) {
     const createdDate = parsePBDate(chore.created);
     
     if (!chore.frequency || chore.frequency === 'none') {
-        if (Array.isArray(chore.due_dates) && chore.due_dates.length > 0 && chore.due_dates[0]) {
-            const parts = chore.due_dates[0].split('-');
+        const dateStr = chore.one_off_date || (Array.isArray(chore.due_dates) && chore.due_dates[0]);
+        if (dateStr) {
+            const parts = dateStr.split('-');
             let due;
             if (parts.length === 3) {
                 due = new Date(parts[0], parts[1] - 1, parts[2]);
             } else {
-                due = parsePBDate(chore.due_dates[0]);
+                due = parsePBDate(dateStr);
             }
             due.setHours(0,0,0,0);
             return now.getTime() > due.getTime();
@@ -117,13 +118,14 @@ export function shouldPenalize(chore) {
     const lastTouchedDate = parsePBDate(chore.updated);
     
     if (!chore.frequency || chore.frequency === 'none') {
-        if (Array.isArray(chore.due_dates) && chore.due_dates.length > 0 && chore.due_dates[0]) {
-            const parts = chore.due_dates[0].split('-');
+        const dateStr = chore.one_off_date || (Array.isArray(chore.due_dates) && chore.due_dates[0]);
+        if (dateStr) {
+            const parts = dateStr.split('-');
             let due;
             if (parts.length === 3) {
                 due = new Date(parts[0], parts[1] - 1, parts[2]);
             } else {
-                due = parsePBDate(chore.due_dates[0]);
+                due = parsePBDate(dateStr);
             }
             due.setHours(0,0,0,0);
             return now.getTime() > due.getTime();
@@ -599,8 +601,9 @@ export function useChores(groupBy) {
 
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
         const todayIdx = new Date().getDay();
+        const dateStr = c.one_off_date || (Array.isArray(c.due_dates) && c.due_dates[0]);
 
-        if (c.frequency === 'daily' || c.frequency === 'weekly' || ((c.frequency === 'none' || !c.frequency) && Array.isArray(c.due_dates) && c.due_dates.length > 0 && c.due_dates[0])) {
+        if (c.frequency === 'daily' || c.frequency === 'weekly' || ((c.frequency === 'none' || !c.frequency) && dateStr)) {
             let pool = [];
             if (Array.isArray(c.round_robin_pool) && c.round_robin_pool.length > 0) {
                 pool = c.round_robin_pool.map(val => {
@@ -626,11 +629,11 @@ export function useChores(groupBy) {
                 if (Array.isArray(c.due_dates)) dueDays = c.due_dates.map(d => String(d).trim());
                 else if (typeof c.due_dates === 'string') dueDays = c.due_dates.split(',').map(d => d.trim());
             } else if (c.frequency === 'none' || !c.frequency) {
-                const parts = c.due_dates[0].split('-'); // YYYY-MM-DD
+                const parts = dateStr.split('-'); // YYYY-MM-DD
                 if (parts.length === 3) {
                     oneOffDateObj = new Date(parts[0], parts[1] - 1, parts[2]);
                 } else {
-                    oneOffDateObj = parsePBDate(c.due_dates[0]);
+                    oneOffDateObj = parsePBDate(dateStr);
                 }
                 oneOffDateObj.setHours(0,0,0,0);
             }
@@ -733,7 +736,7 @@ export function useChores(groupBy) {
         let day_due = 'Uncategorized';
         if (c.frequency === 'monthly') day_due = 'Monthly';
         else if (c.frequency === 'none' || !c.frequency) {
-            if (c.due_dates && c.due_dates.length > 0) {
+            if (c.one_off_date || (c.due_dates && c.due_dates.length > 0)) {
                 day_due = 'Upcoming One-off Tasks';
             } else {
                 day_due = 'One-off Tasks';
