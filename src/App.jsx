@@ -84,6 +84,12 @@ function App() {
           onWake={() => setIsIdle(false)} 
           childrenProfiles={children} 
           profiles={profiles}
+          sortedGroupEntries={sortedGroupEntries}
+          groupBy={groupBy}
+          toggleChore={toggleChore}
+          skipChore={skipChore}
+          rotateAssignee={rotateAssignee}
+          birthdayProfiles={birthdayProfiles}
         />
       )}
 

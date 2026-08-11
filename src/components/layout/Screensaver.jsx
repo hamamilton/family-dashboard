@@ -4,8 +4,19 @@ import { useDadJoke } from '../../hooks/useDadJoke';
 import { Star } from 'lucide-react';
 import { SideQuest } from '../features/SideQuest';
 import { CalendarView } from '../views/CalendarView';
+import { ChoreGrid } from '../views/ChoreGrid';
 
-export function Screensaver({ onWake, childrenProfiles, profiles }) {
+export function Screensaver({ 
+    onWake, 
+    childrenProfiles, 
+    profiles,
+    sortedGroupEntries,
+    groupBy,
+    toggleChore,
+    skipChore,
+    rotateAssignee,
+    birthdayProfiles
+}) {
     const { photos } = usePhotos();
     const { fetchJoke } = useDadJoke();
     const [currentTime, setCurrentTime] = useState(new Date());
@@ -99,9 +110,23 @@ export function Screensaver({ onWake, childrenProfiles, profiles }) {
         >
             {/* Split Screen Layout */}
             <div className="absolute inset-0 flex flex-row">
-                {/* Left Half: Calendar */}
-                <div className="w-1/2 h-full relative border-r border-white/10 pointer-events-none bg-slate-50 dark:bg-slate-950">
-                    <CalendarView profiles={profiles} isScreensaver={true} />
+                {/* Left Half: Calendar & Tasks */}
+                <div className="w-1/2 h-full relative border-r border-white/10 pointer-events-none bg-slate-50 dark:bg-slate-950 flex flex-col">
+                    <div className="h-1/2 w-full border-b border-white/10 relative overflow-hidden">
+                        <CalendarView profiles={profiles} isScreensaver={true} />
+                    </div>
+                    <div className="h-1/2 w-full relative overflow-hidden page-bg">
+                        <ChoreGrid
+                            sortedGroupEntries={sortedGroupEntries}
+                            profiles={profiles}
+                            groupBy={groupBy}
+                            toggleChore={toggleChore}
+                            skipChore={skipChore}
+                            rotateAssignee={rotateAssignee}
+                            birthdayProfiles={birthdayProfiles}
+                            isScreensaver={true}
+                        />
+                    </div>
                     <div className="absolute inset-0 bg-black/10 pointer-events-none z-[998]" />
                 </div>
                 
