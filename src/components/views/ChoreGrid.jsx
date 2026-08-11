@@ -96,13 +96,15 @@ export function ChoreGrid({ sortedGroupEntries, profiles, groupBy, toggleChore, 
                             </div>
                         ) : (
                             <div className={`grid ${
-                                cardLayout === 'list' 
-                                    ? 'grid-cols-1 lg:grid-cols-2 gap-3' 
-                                    : cardLayout === 'dense'
-                                        ? 'grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3'
-                                        : cardLayout === 'compact'
-                                            ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4'
-                                            : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6'
+                                isScreensaver
+                                    ? 'grid-cols-1 gap-2'
+                                    : cardLayout === 'list' 
+                                        ? 'grid-cols-1 lg:grid-cols-2 gap-3' 
+                                        : cardLayout === 'dense'
+                                            ? 'grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3'
+                                            : cardLayout === 'compact'
+                                                ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4'
+                                                : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6'
                             }`}>
                                 {items.map((chore) => (
                                     <ChoreCard
@@ -111,7 +113,7 @@ export function ChoreGrid({ sortedGroupEntries, profiles, groupBy, toggleChore, 
                                         onToggle={toggleChore}
                                         onSkip={skipChore}
                                         onRotate={rotateAssignee}
-                                        layout={cardLayout}
+                                        layout={isScreensaver ? 'list' : cardLayout}
                                     />
                                 ))}
                             </div>
