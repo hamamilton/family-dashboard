@@ -69,7 +69,7 @@ export function getDaysLate(chore) {
 }
 
 export function isChoreOverdue(chore) {
-    if (chore.is_completed) return false;
+    if (chore.is_completed || chore.is_skipped) return false;
     if (chore.frequency === 'daily') return false; // Daily chores are never shown as overdue in the UI
     
     const now = new Date();
@@ -109,11 +109,12 @@ export function isChoreOverdue(chore) {
 }
 
 export function shouldPenalize(chore) {
-    if (chore.is_completed) return false;
+    if (chore.is_completed || chore.is_skipped) return false;
     
     const now = new Date();
     now.setHours(0,0,0,0);
-    const createdDate = parsePBDate(chore.created);
+    // Use updated date so recurring chores that are reset don't get permanently stuck triggering penalties
+    const lastTouchedDate = parsePBDate(chore.updated);
     
     if (!chore.frequency || chore.frequency === 'none') {
         if (Array.isArray(chore.due_dates) && chore.due_dates.length > 0 && chore.due_dates[0]) {
@@ -131,11 +132,50 @@ export function shouldPenalize(chore) {
     }
 
     if (chore.frequency === 'daily') {
-        return createdDate < now; // If it was created before today and isn't completed, it missed yesterday
+        return lastTouchedDate < now; 
     }
     
     if (chore.frequency === 'weekly' || chore.frequency === 'monthly') {
-        const minDiff = getDaysLate(chore); 
+        let minDiff = getDaysLate(chore); 
+        
+        if (minDiff === 0) {
+            if (chore.frequency === 'weekly') {
+                let daysArray = [];
+                if (Array.isArray(chore.due_dates)) daysArray = chore.due_dates.map(d => String(d).trim());
+                else if (typeof chore.due_dates === 'string') daysArray = chore.due_dates.split(',').map(d => d.trim());
+                
+                const days = daysArray.map(d => dayMap[d]).filter(d => d !== undefined);
+                if (days.length > 0) {
+                    const currentDayInt = now.getDay();
+                    let prevDiff = Infinity;
+                    for (let dueDayInt of days) {
+                        let diff = currentDayInt - dueDayInt;
+                        if (diff <= 0) diff += 7;
+                        if (diff < prevDiff) prevDiff = diff;
+                    }
+                    if (prevDiff !== Infinity) minDiff = prevDiff;
+                }
+            } else if (chore.frequency === 'monthly') {
+                let dates = [];
+                if (Array.isArray(chore.due_dates)) dates = chore.due_dates.map(d => parseInt(String(d).trim(), 10));
+                else if (typeof chore.due_dates === 'string') dates = chore.due_dates.split(',').map(d => parseInt(d.trim(), 10));
+                dates = dates.filter(n => !isNaN(n));
+                
+                if (dates.length > 0) {
+                    let prevDiff = Infinity;
+                    for (let dueDay of dates) {
+                        let dueDate = new Date(now.getFullYear(), now.getMonth(), dueDay);
+                        if (now.getDate() <= dueDay) {
+                            dueDate = new Date(now.getFullYear(), now.getMonth() - 1, dueDay);
+                        }
+                        const diffDays = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+                        if (diffDays > 0 && diffDays < prevDiff) prevDiff = diffDays;
+                    }
+                    if (prevDiff !== Infinity) minDiff = prevDiff;
+                }
+            }
+        }
+        
         if (minDiff === 0) return false; 
         
         const recentDue = new Date();
@@ -145,7 +185,7 @@ export function shouldPenalize(chore) {
         const dayAfterDue = new Date(recentDue);
         dayAfterDue.setDate(dayAfterDue.getDate() + 1);
         
-        return createdDate < dayAfterDue;
+        return lastTouchedDate < dayAfterDue;
     }
     
     return false;
@@ -210,7 +250,88 @@ export function useChores(groupBy) {
                 }
             }
 
-            // 1. Reset Recurring Chores
+            // 1. Process Overdue Penalties (-2 XP daily) and Rotate Incomplete Chores
+            const choresToPenalize = rawChoreList.filter(c => {
+                if (!shouldPenalize(c)) return false;
+                
+                const updatedStr = getLocalYYYYMMDD(parsePBDate(c.updated));
+                if (updatedStr === todayStr) return false; // Already penalized/touched today
+                
+                return true;
+            });
+
+            if (choresToPenalize.length > 0) {
+                await Promise.all(choresToPenalize.map(async (c) => {
+                    const assignedIds = Array.isArray(c.assigned_to) ? c.assigned_to : (c.assigned_to ? [c.assigned_to] : []);
+                    const assignedProfiles = assignedIds.map(id => profileList.find(p => p.id === id || p.name === id)).filter(Boolean);
+                    
+                    const isStrict = c.chore_name && c.chore_name.includes('[STRICT]');
+                    const penaltyAmount = isStrict ? 5 : 2;
+                    let updateData = {};
+
+                    if (isStrict) {
+                        // Mark as completed so it disappears and resets naturally next week.
+                        updateData.is_completed = true;
+                    } else {
+                        // Toggle a trailing space to force PocketBase to update the timestamp
+                        const currentName = c.chore_name || '';
+                        updateData.chore_name = currentName.endsWith(' ') ? currentName.trimEnd() : currentName + ' ';
+                        
+                        // Rotate incomplete chores if today is a due date
+                        let isDueToday = false;
+                        if (c.frequency === 'daily') {
+                            isDueToday = true;
+                        } else if (c.frequency === 'monthly' && c.due_dates) {
+                            let dates = [];
+                            if (Array.isArray(c.due_dates)) dates = c.due_dates.map(d => parseInt(String(d).trim(), 10));
+                            else if (typeof c.due_dates === 'string') dates = c.due_dates.split(',').map(d => parseInt(d.trim(), 10));
+                            isDueToday = dates.includes(now.getDate());
+                        } else if (c.frequency === 'weekly' && c.due_dates) {
+                            const todayName = Object.keys(dayMap).find(k => dayMap[k] === now.getDay());
+                            let dueDays = [];
+                            if (Array.isArray(c.due_dates)) dueDays = c.due_dates.map(d => String(d).trim());
+                            else if (typeof c.due_dates === 'string') dueDays = c.due_dates.split(',').map(d => d.trim());
+                            isDueToday = dueDays.includes(todayName);
+                        }
+
+                        if (isDueToday) {
+                            let pool = [];
+                            if (Array.isArray(c.round_robin_pool) && c.round_robin_pool.length > 0) {
+                                pool = c.round_robin_pool.map(val => {
+                                    const profile = profileList.find(p => p.id === val || p.name === val);
+                                    return profile ? profile.id : val;
+                                }).filter(Boolean);
+                            } else if (typeof c.round_robin_pool === 'string' && c.round_robin_pool.trim() !== '') {
+                                pool = c.round_robin_pool.split(',').map(val => {
+                                    const profile = profileList.find(p => p.id === val.trim() || p.name === val.trim());
+                                    return profile ? profile.id : val.trim();
+                                }).filter(Boolean);
+                            }
+                            
+                            if (pool.length > 1) {
+                                const currentAssignedId = Array.isArray(c.assigned_to) ? c.assigned_to[0] : c.assigned_to;
+                                const currentIdx = pool.indexOf(currentAssignedId);
+                                const nextIdx = currentIdx === -1 ? 0 : (currentIdx + 1) % pool.length;
+                                updateData.assigned_to = pool[nextIdx];
+                            }
+                        }
+                    }
+
+                    await pb.collection('chores').update(c.id, updateData);
+
+                    for (const profile of assignedProfiles) {
+                        const latestProfile = await pb.collection('profiles').getOne(profile.id);
+                        await pb.collection('profiles').update(profile.id, {
+                            xp_balance: Math.max(0, (latestProfile.xp_balance || 0) - penaltyAmount)
+                        });
+                    }
+                }));
+                
+                fetchData(); // Refetch cleanly
+                return;
+            }
+
+            // 1.5. Reset Completed/Skipped Recurring Chores
             const choresToReset = rawChoreList.filter(c => {
                 if (!(c.is_completed || c.is_skipped) || !c.frequency || c.frequency === 'none') return false;
                 const updatedStr = getLocalYYYYMMDD(parsePBDate(c.updated));
@@ -267,47 +388,6 @@ export function useChores(groupBy) {
                 return;
             }
 
-            // 1.5. Process Overdue Penalties (-2 XP daily)
-            const choresToPenalize = rawChoreList.filter(c => {
-                if (!shouldPenalize(c)) return false;
-                
-                const updatedStr = getLocalYYYYMMDD(parsePBDate(c.updated));
-                if (updatedStr === todayStr) return false; // Already penalized/touched today
-                
-                return true;
-            });
-
-            if (choresToPenalize.length > 0) {
-                await Promise.all(choresToPenalize.map(async (c) => {
-                    const assignedIds = Array.isArray(c.assigned_to) ? c.assigned_to : (c.assigned_to ? [c.assigned_to] : []);
-                    const assignedProfiles = assignedIds.map(id => profileList.find(p => p.id === id || p.name === id)).filter(Boolean);
-                    
-                    const isStrict = c.chore_name && c.chore_name.includes('[STRICT]');
-                    const penaltyAmount = isStrict ? 5 : 2;
-
-                    if (isStrict) {
-                        // Mark as completed so it disappears and resets naturally next week.
-                        await pb.collection('chores').update(c.id, { is_completed: true });
-                    } else {
-                        // Toggle a trailing space to force PocketBase to update the timestamp
-                        const currentName = c.chore_name || '';
-                        const newName = currentName.endsWith(' ') ? currentName.trimEnd() : currentName + ' ';
-                        await pb.collection('chores').update(c.id, { chore_name: newName });
-                    }
-
-                    for (const profile of assignedProfiles) {
-                        // Fetch the latest profile to prevent race conditions during parallel updates
-                        const latestProfile = await pb.collection('profiles').getOne(profile.id);
-                        await pb.collection('profiles').update(profile.id, {
-                            xp_balance: Math.max(0, (latestProfile.xp_balance || 0) - penaltyAmount)
-                        });
-                    }
-                }));
-                
-                fetchData(); // Refetch cleanly
-                return;
-            }
-
             // 1.5. Assign unassigned chores
             const unassignedChores = rawChoreList.filter(c => !c.assigned_to || (Array.isArray(c.assigned_to) && c.assigned_to.length === 0));
             if (unassignedChores.length > 0) {
@@ -338,7 +418,7 @@ export function useChores(groupBy) {
 
             // 2. Filter Visibility
             const visibleChores = rawChoreList.filter(c => {
-                if (!c.is_completed) return true; 
+                if (!(c.is_completed || c.is_skipped)) return true; 
                 const updatedStr = getLocalYYYYMMDD(parsePBDate(c.updated));
                 if (updatedStr === todayStr) return true; 
                 
@@ -556,7 +636,7 @@ export function useChores(groupBy) {
             }
 
             let assignmentCounter = 0;
-            const overdue = isChoreOverdue(c) || (oneOffDateObj && oneOffDateObj.getTime() < new Date().setHours(0,0,0,0) && !c.is_completed);
+            const overdue = isChoreOverdue(c) || (oneOffDateObj && oneOffDateObj.getTime() < new Date().setHours(0,0,0,0) && !(c.is_completed || c.is_skipped));
             
             const parents = profiles.filter(p => p.is_parent);
             const parentName = parents.length > 0 ? parents[0].name : 'Mom/Dad';
