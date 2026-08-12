@@ -5,6 +5,7 @@ import { Star } from 'lucide-react';
 import { SideQuest } from '../features/SideQuest';
 import { CalendarView } from '../views/CalendarView';
 import { ChoreGrid } from '../views/ChoreGrid';
+import { GospelStudy } from '../features/GospelStudy';
 
 export function Screensaver({ 
     onWake, 
@@ -109,9 +110,9 @@ export function Screensaver({
             onClick={onWake}
         >
             {/* Split Screen Layout */}
-            <div className="absolute inset-0 flex flex-row">
+            <div className="absolute inset-0 flex flex-col md:flex-row">
                 {/* Left Half: Calendar & Tasks */}
-                <div className="w-1/2 h-full relative border-r border-white/10 pointer-events-none bg-slate-50 dark:bg-slate-950 flex flex-col">
+                <div className="w-full md:w-1/2 h-1/2 md:h-full relative border-b md:border-b-0 md:border-r border-white/10 pointer-events-none bg-slate-50 dark:bg-slate-950 flex flex-col">
                     <div className="h-1/2 w-full border-b border-white/10 relative overflow-hidden">
                         <CalendarView profiles={profiles} isScreensaver={true} />
                     </div>
@@ -130,61 +131,67 @@ export function Screensaver({
                     <div className="absolute inset-0 bg-black/10 pointer-events-none z-[998]" />
                 </div>
                 
-                {/* Right Half: Photos & Jokes */}
-                <div className="w-1/2 h-full relative overflow-hidden pointer-events-none flex items-center justify-center bg-slate-900">
-                    {/* Background Particles */}
-                    {particles.map(p => (
-                        <div 
-                            key={p.id}
-                            className="particle"
-                            style={{
-                                left: p.left,
-                                width: p.size,
-                                height: p.size,
-                                bottom: '-10%',
-                                animation: `drift-up ${p.animationDuration} linear infinite`,
-                                animationDelay: p.animationDelay,
-                                opacity: p.opacity
-                            }}
-                        />
-                    ))}
-
-                    {visibleItems.map((item, i) => {
-                        // The oldest item fades out when there are 4 items
-                        const isFading = visibleItems.length === 4 && i === 0;
-                        
-                        return (
+                {/* Right Half: Photos, Jokes, and Gospel Study */}
+                <div className="w-full md:w-1/2 h-1/2 md:h-full flex flex-col relative overflow-hidden pointer-events-none bg-slate-900">
+                    <div className="h-3/4 relative overflow-hidden flex items-center justify-center">
+                        {/* Background Particles */}
+                        {particles.map(p => (
                             <div 
-                                key={item.key}
-                                className={`absolute shadow-2xl p-4 ${item.type === 'photo' ? 'pb-12 bg-white' : `p-8 pb-8 ${item.color}`} rounded-sm pointer-events-none transition-all duration-[2000ms] ease-in-out ${isFading ? 'opacity-0 scale-90 translate-y-8' : 'opacity-100 scale-100'}`}
+                                key={p.id}
+                                className="particle"
                                 style={{
-                                    transform: `translate(${item.xOffset}px, ${item.yOffset}px) rotate(${item.rotation}deg)`,
-                                    zIndex: i,
-                                    maxWidth: '80%',
-                                    maxHeight: '80%'
+                                    left: p.left,
+                                    width: p.size,
+                                    height: p.size,
+                                    bottom: '-10%',
+                                    animation: `drift-up ${p.animationDuration} linear infinite`,
+                                    animationDelay: p.animationDelay,
+                                    opacity: p.opacity
                                 }}
-                            >
-                                <div className="washi-tape"></div>
-                                <div className="animate-drop-in w-full h-full flex items-center justify-center overflow-hidden">
-                                    <div className="animate-ken-burns w-full h-full flex items-center justify-center">
-                                        {item.type === 'photo' ? (
-                                            <img 
-                                                src={item.dataUrl} 
-                                                className="w-full h-full object-contain pointer-events-none drop-shadow-md" 
-                                                style={{ maxHeight: '50vh' }}
-                                                alt=""
-                                            />
-                                        ) : (
-                                            <div className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-800 tracking-wide text-center leading-relaxed font-sans p-4" style={{ maxHeight: '50vh', maxWidth: '35vw' }}>
-                                                "{item.text}"
-                                            </div>
-                                        )}
+                            />
+                        ))}
+
+                        {visibleItems.map((item, i) => {
+                            // The oldest item fades out when there are 4 items
+                            const isFading = visibleItems.length === 4 && i === 0;
+                            
+                            return (
+                                <div 
+                                    key={item.key}
+                                    className={`absolute shadow-2xl p-4 ${item.type === 'photo' ? 'pb-12 bg-white' : `p-8 pb-8 ${item.color}`} rounded-sm pointer-events-none transition-all duration-[2000ms] ease-in-out ${isFading ? 'opacity-0 scale-90 translate-y-8' : 'opacity-100 scale-100'}`}
+                                    style={{
+                                        transform: `translate(${item.xOffset}px, ${item.yOffset}px) rotate(${item.rotation}deg)`,
+                                        zIndex: i,
+                                        maxWidth: '80%',
+                                        maxHeight: '80%'
+                                    }}
+                                >
+                                    <div className="washi-tape"></div>
+                                    <div className="animate-drop-in w-full h-full flex items-center justify-center overflow-hidden">
+                                        <div className="animate-ken-burns w-full h-full flex items-center justify-center">
+                                            {item.type === 'photo' ? (
+                                                <img 
+                                                    src={item.dataUrl} 
+                                                    className="w-full h-full object-contain pointer-events-none drop-shadow-md" 
+                                                    style={{ maxHeight: '50vh' }}
+                                                    alt=""
+                                                />
+                                            ) : (
+                                                <div className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-800 tracking-wide text-center leading-relaxed font-sans p-4" style={{ maxHeight: '50vh', maxWidth: '35vw' }}>
+                                                    "{item.text}"
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        );
-                    })}
-                    <div className="absolute inset-0 bg-black/10 pointer-events-none z-[998]" />
+                            );
+                        })}
+                        <div className="absolute inset-0 bg-black/10 pointer-events-none z-[998]" />
+                    </div>
+                    
+                    <div className="h-1/4 relative border-t border-white/10 z-[1001] bg-slate-950">
+                         <GospelStudy />
+                    </div>
                 </div>
             </div>
 
