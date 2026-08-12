@@ -1,7 +1,7 @@
-import { User, Sun, Moon, Menu, X, Zap } from 'lucide-react';
+import { User, Sun, Moon, Menu, X, Zap, MonitorPlay } from 'lucide-react';
 import { SideQuest } from '../features/SideQuest';
 
-export function Header({ isDarkMode, childrenProfiles = [], profiles = [], isMobileMenuOpen, setIsMobileMenuOpen }) {
+export function Header({ isDarkMode, childrenProfiles = [], profiles = [], isMobileMenuOpen, setIsMobileMenuOpen, onStartScreensaver }) {
     const allOP = childrenProfiles.length > 0 && childrenProfiles.every(c => c.is_op);
 
     return (
@@ -48,6 +48,17 @@ export function Header({ isDarkMode, childrenProfiles = [], profiles = [], isMob
                 
                 {/* Side Quest compact widget */}
                 <SideQuest profiles={profiles} compact={true} />
+            </div>
+
+            {/* Right: Actions */}
+            <div className="flex items-center gap-2 shrink-0 border-l border-[#333333] pl-4 ml-2">
+                <button
+                    onClick={onStartScreensaver}
+                    className="p-1.5 text-cyan-600 hover:text-cyan-400 hover:bg-cyan-900/30 rounded-md transition-colors"
+                    title="Start Screensaver"
+                >
+                    <MonitorPlay size={20} />
+                </button>
             </div>
         </header>
     );

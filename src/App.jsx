@@ -100,6 +100,7 @@ function App() {
         profiles={profiles}
         isMobileMenuOpen={isMobileMenuOpen}
         setIsMobileMenuOpen={setIsMobileMenuOpen}
+        onStartScreensaver={() => setIsIdle(true)}
       />
 
       <AdminPanel isOpen={adminOpen} onClose={() => setAdminOpen(false)} />
