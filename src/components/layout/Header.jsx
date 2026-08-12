@@ -5,9 +5,9 @@ export function Header({ isDarkMode, childrenProfiles = [], profiles = [], isMob
     const allOP = childrenProfiles.length > 0 && childrenProfiles.every(c => c.is_op);
 
     return (
-        <header className="flex items-center gap-4 px-4 py-2 font-mono border-b border-[#333333] header-bg flex-none h-[60px]">
+        <header className="flex items-center gap-2 md:gap-4 px-2 md:px-4 py-2 font-mono border-b border-[#333333] header-bg flex-none h-[60px] w-full max-w-[100vw] overflow-hidden">
             {/* Left: Menu Toggle (Mobile Only) + Title */}
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-2 md:gap-3 shrink-0">
                 <button 
                     onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                     className="md:hidden p-1 text-cyan-400 hover:bg-cyan-900/30 rounded-md transition-colors"
@@ -24,7 +24,7 @@ export function Header({ isDarkMode, childrenProfiles = [], profiles = [], isMob
             </div>
 
             {/* Center: Child XP Profiles + compact widgets */}
-            <div className="flex items-center gap-3 flex-1 overflow-x-auto scrollbar-none">
+            <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0 overflow-x-auto scrollbar-none">
                 {childrenProfiles && childrenProfiles.length > 0 ? (
                     childrenProfiles.map(child => (
                         <div
@@ -51,7 +51,7 @@ export function Header({ isDarkMode, childrenProfiles = [], profiles = [], isMob
             </div>
 
             {/* Right: Actions */}
-            <div className="flex items-center gap-2 shrink-0 border-l border-[#333333] pl-4 ml-2">
+            <div className="flex items-center gap-2 shrink-0 border-l border-[#333333] pl-2 md:pl-4 ml-1 md:ml-2">
                 <button
                     onClick={onStartScreensaver}
                     className="p-1.5 text-cyan-600 hover:text-cyan-400 hover:bg-cyan-900/30 rounded-md transition-colors"
