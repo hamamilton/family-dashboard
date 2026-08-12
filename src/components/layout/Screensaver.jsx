@@ -112,7 +112,7 @@ export function Screensaver({
             {/* Split Screen Layout */}
             <div className="absolute inset-0 flex flex-col md:flex-row">
                 {/* Left Half: Calendar & Tasks */}
-                <div className="w-full md:w-1/2 h-1/2 md:h-full relative border-b md:border-b-0 md:border-r border-white/10 pointer-events-none bg-slate-50 dark:bg-slate-950 flex flex-col">
+                <div className="hidden md:flex w-full md:w-1/2 h-1/2 md:h-full relative border-b md:border-b-0 md:border-r border-white/10 pointer-events-none bg-slate-50 dark:bg-slate-950 flex-col">
                     <div className="h-1/2 w-full border-b border-white/10 relative overflow-hidden">
                         <CalendarView profiles={profiles} isScreensaver={true} />
                     </div>
@@ -132,8 +132,8 @@ export function Screensaver({
                 </div>
                 
                 {/* Right Half: Photos, Jokes, and Gospel Study */}
-                <div className="w-full md:w-1/2 h-1/2 md:h-full flex flex-col relative overflow-hidden pointer-events-none bg-slate-900">
-                    <div className="h-3/4 relative overflow-hidden flex items-center justify-center">
+                <div className="w-full md:w-1/2 h-full flex flex-col relative overflow-hidden pointer-events-none bg-slate-900">
+                    <div className="h-full md:h-3/4 relative overflow-hidden flex items-center justify-center">
                         {/* Background Particles */}
                         {particles.map(p => (
                             <div 
@@ -189,7 +189,7 @@ export function Screensaver({
                         <div className="absolute inset-0 bg-black/10 pointer-events-none z-[998]" />
                     </div>
                     
-                    <div className="h-1/4 relative border-t border-white/10 z-[1001] bg-slate-950">
+                    <div className="hidden md:block h-1/4 relative border-t border-white/10 z-[1001] bg-slate-950">
                          <GospelStudy />
                     </div>
                 </div>
@@ -198,7 +198,7 @@ export function Screensaver({
             {/* Linear Gradient Overlay for text readability (only at the bottom) */}
             <div className="absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-black/90 via-black/40 to-transparent pointer-events-none z-[999]" />
 
-            <div className="relative z-[1000] p-12 flex justify-end items-end w-full gap-12">
+            <div className="hidden md:flex relative z-[1000] p-12 justify-end items-end w-full gap-12">
                 {/* Lower Left: Children XP (Shrunk) */}
                 <div className="flex flex-col gap-2">
                     {childrenProfiles && childrenProfiles.map(child => (
@@ -226,14 +226,14 @@ export function Screensaver({
             
             {/* Top Right: Side Quest */}
             <div 
-                className="absolute top-8 right-8 z-[1000]"
+                className="hidden md:block absolute top-8 right-8 z-[1000]"
                 onClick={(e) => e.stopPropagation()}
             >
                 <SideQuest profiles={profiles} compact={true} />
             </div>
 
             {/* Top Left: Floating 'Tap to wake' prompt */}
-            <div className="absolute top-8 left-8 bg-black/40 backdrop-blur-sm px-4 py-2 rounded-full border border-white/20 text-white/70 text-sm tracking-widest uppercase animate-pulse z-[1000]">
+            <div className="hidden md:block absolute top-8 left-8 bg-black/40 backdrop-blur-sm px-4 py-2 rounded-full border border-white/20 text-white/70 text-sm tracking-widest uppercase animate-pulse z-[1000]">
                 Tap anywhere to wake
             </div>
         </div>
