@@ -45,7 +45,7 @@ export function ChoreCard({ chore, onToggle, onSkip, onRotate, layout = 'origina
                         <h3 className={`font-black leading-tight tracking-widest truncate ${
                             layout === 'dense' ? 'text-lg mb-1' :
                             layout === 'compact' ? 'text-xl mb-1.5' :
-                            layout === 'list' ? 'text-lg max-w-[60%]' :
+                            layout === 'list' ? 'text-sm md:text-lg max-w-[60%]' :
                             'text-2xl mb-2'
                         } ${(chore.is_completed || chore.is_skipped) ? 'line-through text-emerald-700 dark:text-emerald-700' : 'text-slate-800 dark:text-white drop-shadow-sm dark:drop-shadow-[0_0_5px_rgba(255,255,255,0.5)]'}`}>
                             {chore.chore_name.replace('[STRICT]', '').trim()}
