@@ -60,7 +60,7 @@ export function useCalendar() {
                             throw new Error('Direct fetch failed');
                         }
                     } catch (e) {
-                        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(sub.color)}`;
+                        const proxyUrl = `/api/ical?url=${encodeURIComponent(sub.color)}`;
                         const res = await fetch(proxyUrl);
                         if (!res.ok) continue;
                         text = await res.text();
