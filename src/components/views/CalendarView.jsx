@@ -794,6 +794,7 @@ export function CalendarView({ profiles = [], isScreensaver = false }) {
                 subscriptions={subscriptions}
                 addSubscription={addSubscription}
                 removeSubscription={removeSubscription}
+                profiles={profiles}
             />
         </div>
     );

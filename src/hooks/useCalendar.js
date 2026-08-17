@@ -31,7 +31,7 @@ export function useCalendar() {
             const subRecords = records.filter(r => r.title === '[ICAL_SUBSCRIPTION]');
             const normalRecords = records.filter(r => r.title !== '[ICAL_SUBSCRIPTION]');
 
-            setSubscriptions(subRecords.map(r => ({ id: r.id, url: r.color })));
+            setSubscriptions(subRecords.map(r => ({ id: r.id, url: r.color, assignee: r.assignee })));
 
             const formattedRecords = normalRecords.map(record => {
                 const startDate = new Date(record.date || record.start);
@@ -95,7 +95,7 @@ export function useCalendar() {
                                             title: event.summary,
                                             start: jsDate,
                                             end: nextEnd,
-                                            assigned_to: 'Everyone',
+                                            assigned_to: sub.assignee || 'Everyone',
                                             color: '#64748b', // slate-500 representation
                                             isExternal: true,
                                             readonly: true
@@ -112,7 +112,7 @@ export function useCalendar() {
                                     title: event.summary,
                                     start: jsDate,
                                     end: event.endDate ? event.endDate.toJSDate() : new Date(jsDate.getTime() + duration * 1000),
-                                    assigned_to: 'Everyone',
+                                    assigned_to: sub.assignee || 'Everyone',
                                     color: '#64748b',
                                     isExternal: true,
                                     readonly: true
@@ -265,11 +265,12 @@ export function useCalendar() {
         }
     };
 
-    const addSubscription = async (url) => {
+    const addSubscription = async (url, assignee = 'Everyone') => {
         try {
             await pb.collection('events').create({
                 title: '[ICAL_SUBSCRIPTION]',
                 color: url,
+                assignee: assignee,
                 date: new Date().toISOString(),
                 end: new Date().toISOString()
             });

@@ -1,16 +1,18 @@
 import { useState } from 'react';
 import { X, Plus, Trash2, CalendarDays } from 'lucide-react';
 
-export function SubscriptionsModal({ isOpen, onClose, subscriptions, addSubscription, removeSubscription }) {
+export function SubscriptionsModal({ isOpen, onClose, subscriptions, addSubscription, removeSubscription, profiles = [] }) {
     const [newUrl, setNewUrl] = useState('');
+    const [assignee, setAssignee] = useState('Everyone');
 
     if (!isOpen) return null;
 
     const handleAdd = async (e) => {
         e.preventDefault();
         if (!newUrl.trim()) return;
-        await addSubscription(newUrl.trim());
+        await addSubscription(newUrl.trim(), assignee);
         setNewUrl('');
+        setAssignee('Everyone');
     };
 
     return (
@@ -29,18 +31,30 @@ export function SubscriptionsModal({ isOpen, onClose, subscriptions, addSubscrip
                 <div className="p-6 flex-1 overflow-y-auto custom-scrollbar">
                     <form onSubmit={handleAdd} className="flex flex-col gap-2 mb-6">
                         <label className="text-[10px] font-bold uppercase tracking-widest text-cyan-600">Add New Subscription (URL)</label>
-                        <div className="flex gap-2">
+                        <div className="flex flex-col gap-2">
                             <input 
                                 type="url" 
                                 value={newUrl}
                                 onChange={e => setNewUrl(e.target.value)}
                                 placeholder="https://example.com/calendar.ics"
-                                className="flex-1 bg-black border border-slate-700 focus:border-cyan-400 px-3 py-2 text-white text-sm outline-none transition-colors"
+                                className="w-full bg-black border border-slate-700 focus:border-cyan-400 px-3 py-2 text-white text-sm outline-none transition-colors"
                             />
-                            <button type="submit" disabled={!newUrl.trim()}
-                                className="bg-cyan-500 hover:bg-cyan-400 text-black font-black uppercase tracking-widest px-4 py-2 text-xs transition-colors disabled:opacity-50 flex items-center gap-1">
-                                <Plus size={16} /> Add
-                            </button>
+                            <div className="flex gap-2">
+                                <select
+                                    value={assignee}
+                                    onChange={e => setAssignee(e.target.value)}
+                                    className="flex-1 bg-black border border-slate-700 focus:border-cyan-400 px-3 py-2 text-white text-sm outline-none transition-colors"
+                                >
+                                    <option value="Everyone">Assign to: Everyone</option>
+                                    {profiles.map(p => (
+                                        <option key={p.id} value={p.name}>Assign to: {p.name}</option>
+                                    ))}
+                                </select>
+                                <button type="submit" disabled={!newUrl.trim()}
+                                    className="bg-cyan-500 hover:bg-cyan-400 text-black font-black uppercase tracking-widest px-4 py-2 text-xs transition-colors disabled:opacity-50 flex items-center gap-1">
+                                    <Plus size={16} /> Add
+                                </button>
+                            </div>
                         </div>
                     </form>
 
@@ -51,7 +65,12 @@ export function SubscriptionsModal({ isOpen, onClose, subscriptions, addSubscrip
                         ) : (
                             subscriptions.map(sub => (
                                 <div key={sub.id} className="flex items-center justify-between gap-4 p-3 border border-slate-800 bg-black/50 hover:border-slate-600 transition-colors">
-                                    <p className="text-sm text-slate-300 truncate flex-1" title={sub.url}>{sub.url}</p>
+                                    <div className="flex flex-col flex-1 min-w-0">
+                                        <p className="text-sm text-slate-300 truncate" title={sub.url}>{sub.url}</p>
+                                        <span className="text-[10px] font-bold text-cyan-500 uppercase tracking-widest mt-1">
+                                            Assigned to: {sub.assignee || 'Everyone'}
+                                        </span>
+                                    </div>
                                     <button onClick={() => removeSubscription(sub.id)} className="text-slate-500 hover:text-rose-400 p-1 flex-none transition-colors" title="Remove Subscription">
                                         <Trash2 size={16} />
                                     </button>
