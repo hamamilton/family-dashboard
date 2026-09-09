@@ -31,20 +31,22 @@ export function Screensaver({ onWake }) {
 
     // Deal a new card or joke every 8 seconds
     useEffect(() => {
-        if (!photos || photos.length === 0) return;
-        
         let currentIndex = 0;
         let itemCounter = 0;
         
         const addItem = async () => {
+            const hasPhotos = photos && photos.length > 0;
             let isJoke = false;
             let jokeText = '';
             
             itemCounter++;
-            if (itemCounter % 4 === 0) {
+            // If no photos, every item is a joke. If photos exist, every 4th item is a joke.
+            if (!hasPhotos || itemCounter % 4 === 0) {
                 jokeText = await fetchJoke();
                 if (jokeText) {
                     isJoke = true;
+                } else if (!hasPhotos) {
+                    return; // No photos and fetchJoke failed
                 }
             }
 
@@ -72,7 +74,7 @@ export function Screensaver({ onWake }) {
                 return newArr;
             });
             
-            if (!isJoke) {
+            if (!isJoke && hasPhotos) {
                 currentIndex++;
                 if (currentIndex >= photos.length) currentIndex = 0;
             }
