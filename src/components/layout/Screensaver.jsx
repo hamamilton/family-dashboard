@@ -96,7 +96,7 @@ export function Screensaver({ onWake }) {
             onClick={onWake}
         >
             {/* Full Screen Layout for Photos & Jokes */}
-            <div className="absolute inset-0 flex flex-col relative overflow-hidden pointer-events-none bg-slate-900">
+            <div className="absolute inset-0 flex flex-col overflow-hidden pointer-events-none bg-slate-900">
                 <div className="h-full w-full relative overflow-hidden flex items-center justify-center">
                     {/* Background Particles */}
                     {particles.map(p => (
