@@ -12,6 +12,7 @@ import { GospelStudy } from './components/features/GospelStudy';
 import { LocalEvents } from './components/features/LocalEvents';
 import { LittleVillageEvents } from './components/features/LittleVillageEvents';
 import { AmbientDisplay } from './components/features/AmbientDisplay';
+import { DotsAndBoxes } from './components/features/DotsAndBoxes';
 import { CombinedBoard } from './components/views/CombinedBoard';
 import { RefreshCw, ClipboardList, CalendarDays } from 'lucide-react';
 
@@ -256,6 +257,15 @@ function App() {
                     </div>
                     <div className="page-card min-h-[400px] flex flex-col">
                       <LittleVillageEvents />
+                    </div>
+                  </div>
+                )}
+
+                {/* GAMES */}
+                {activeTab === 'games' && (
+                  <div className="p-4 md:p-6 flex-1 flex flex-col">
+                    <div className="page-card flex-1 min-h-[600px] flex flex-col">
+                      <DotsAndBoxes profiles={profiles} isDarkMode={isDarkMode} />
                     </div>
                   </div>
                 )}

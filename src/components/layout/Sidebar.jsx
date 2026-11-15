@@ -16,7 +16,8 @@ import {
   Moon,
   Maximize,
   Minimize,
-  Camera
+  Camera,
+  Gamepad2
 } from 'lucide-react';
 import { WeatherWidget } from '../features/WeatherWidget';
 
@@ -60,6 +61,7 @@ export function Sidebar({
     { id: 'shopping', label: 'Shopping List', icon: ShoppingCart },
     { id: 'gospel', label: 'Come, Follow Me', icon: BookOpen },
     { id: 'fun', label: 'Fun Stuff', icon: Star },
+    { id: 'games', label: 'Games', icon: Gamepad2 },
     { id: 'memories', label: 'Memory Bank', icon: Camera },
   ];
 
