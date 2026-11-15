@@ -3,17 +3,26 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const targetUrl = req.query.url;
+    let targetUrl = req.query.url;
 
     if (!targetUrl) {
         return res.status(400).json({ error: 'URL parameter is required' });
     }
 
+    // Normalize webcal:// or webcals:// protocols
+    targetUrl = targetUrl.trim().replace(/^webcals?:\/\//i, 'https://');
+
     try {
-        const fetchRes = await fetch(targetUrl);
+        const fetchRes = await fetch(targetUrl, {
+            headers: {
+                'User-Agent': 'FamilyHub-Calendar/1.0',
+                'Accept': 'text/calendar, text/plain, */*'
+            },
+            redirect: 'follow'
+        });
         
         if (!fetchRes.ok) {
-            return res.status(fetchRes.status).send(`Failed to fetch: ${fetchRes.statusText}`);
+            return res.status(fetchRes.status).send(`Failed to fetch (${fetchRes.status}): ${fetchRes.statusText}`);
         }
 
         const text = await fetchRes.text();

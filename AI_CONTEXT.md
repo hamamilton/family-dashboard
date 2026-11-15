@@ -39,6 +39,9 @@ All collections have **open API rules** (no authentication required).
 | `is_op` | Bool | Auto-set to `true` when xp_balance ≥ 1000. Gives 1.5x XP bonus |
 | `is_parent` | Bool | Used for admin UI access (separate from is_op game mechanic!) |
 | `birthday` | Text | Format: `MM-DD` (e.g. `05-12`). Triggers birthday rest day |
+| `last_reset_month` | Text | Format: `YYYY-MM`. Tracks monthly chore reset |
+| `phone` | Text | US 10-digit phone number for automated SMS |
+| `carrier` | Text | Mobile carrier key (e.g. `verizon`, `att`, `tmobile`, `googlefi`) |
 
 ### `chores`
 | Field | Type | Notes |
@@ -182,10 +185,21 @@ src/
 ---
 
 ## 🔜 Planned / Discussed Features
+- [x] Holiday events shown automatically on the Family Calendar (from the Nager.at API) & Birthdays from profiles
+- [x] Member & Category filter pills (All, Arthur, Ben, Mom, Dad, Holidays, Birthdays) in Calendar & Combined views
+- [x] Day-by-day weather forecast badges on calendar headers and Combined board day rows
+- [x] Dad Joke dispatch via native iMessage for Apple devices (with 1-tap copy fallback for non-Apple)
 - [ ] Parents-only admin UI (using `is_parent` field) for adding/editing chores from the dashboard
-- [ ] Holiday events shown automatically on the Family Calendar (from the Nager.at API)
 - [ ] Seasonal chores (e.g. specific month ranges only)
 - [ ] Push notifications for due chores
+
+---
+
+## 💬 Dad Joke Dispatch (iMessage)
+- Uses client-side `sms:` protocol with prefilled body on Apple devices (Mac, iPhone, iPad).
+- Automatically disabled on non-Apple products to prevent broken app handler errors.
+- Instant 1-tap clipboard copy for pasting into any messenger.
+- No SMTP server or carrier gateways required.
 
 ---
 

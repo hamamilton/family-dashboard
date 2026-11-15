@@ -51,14 +51,16 @@ export function Header({ isDarkMode, childrenProfiles = [], profiles = [], isMob
             </div>
 
             {/* Right: Actions */}
-            <div className="flex items-center gap-2 shrink-0 border-l border-[#333333] pl-2 md:pl-4 ml-1 md:ml-2">
-                <button
-                    onClick={onStartScreensaver}
-                    className="p-1.5 text-cyan-600 hover:text-cyan-400 hover:bg-cyan-900/30 rounded-md transition-colors"
-                    title="Start Screensaver"
-                >
-                    <MonitorPlay size={20} />
-                </button>
+            <div className="flex items-center gap-2 shrink-0 border-l border-[#333333] pl-2 md:pl-3 ml-1">
+                {onStartScreensaver && (
+                    <button
+                        onClick={onStartScreensaver}
+                        className="p-1.5 text-cyan-600 hover:text-cyan-400 hover:bg-cyan-900/30 rounded-md transition-colors"
+                        title="Start Screensaver"
+                    >
+                        <MonitorPlay size={20} />
+                    </button>
+                )}
             </div>
         </header>
     );

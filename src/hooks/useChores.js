@@ -3,6 +3,12 @@ import { pb } from '../lib/pocketbase';
 
 const dayMap = { "Sunday": 0, "Monday": 1, "Tuesday": 2, "Wednesday": 3, "Thursday": 4, "Friday": 5, "Saturday": 6 };
 
+export function getAssignedArray(assigned_to) {
+    if (Array.isArray(assigned_to)) return assigned_to;
+    if (typeof assigned_to === 'string') return assigned_to.split(',').map(s => s.trim()).filter(Boolean);
+    return [];
+}
+
 export function parsePBDate(dateStr) {
     if (!dateStr) return new Date();
     if (typeof dateStr === 'string' && dateStr.includes(' ')) {
@@ -20,6 +26,39 @@ export function getLocalYYYYMMDD(dateObjOrString) {
     const month = String(dateObj.getMonth() + 1).padStart(2, '0');
     const day = String(dateObj.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+}
+
+export function getDaysBetween(dateStrA, dateStrB) {
+    if (!dateStrA || !dateStrB) return 0;
+    const partsA = dateStrA.split('-').map(Number);
+    const partsB = dateStrB.split('-').map(Number);
+    if (partsA.length !== 3 || partsB.length !== 3) return 0;
+    const dateA = new Date(partsA[0], partsA[1] - 1, partsA[2]);
+    const dateB = new Date(partsB[0], partsB[1] - 1, partsB[2]);
+    return Math.round((dateB.getTime() - dateA.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+export function getPoolArray(round_robin_pool, profileList = []) {
+    let raw = [];
+    if (Array.isArray(round_robin_pool)) {
+        raw = round_robin_pool;
+    } else if (typeof round_robin_pool === 'string' && round_robin_pool.trim() !== '') {
+        raw = round_robin_pool.split(',').map(s => s.trim()).filter(Boolean);
+    }
+    if (profileList.length === 0) return raw;
+    return raw.map(val => {
+        const profile = profileList.find(p => p.id === val || p.name === val);
+        return profile ? profile.id : val;
+    }).filter(Boolean);
+}
+
+export function getNextAssignee(currentAssignee, pool) {
+    if (!pool || pool.length === 0) return currentAssignee;
+    if (pool.length === 1) return pool[0];
+    const currentId = getAssignedArray(currentAssignee)[0] || currentAssignee;
+    const currentIdx = pool.indexOf(currentId);
+    const nextIdx = currentIdx === -1 ? 0 : (currentIdx + 1) % pool.length;
+    return pool[nextIdx];
 }
 
 export function getDaysLate(chore) {
@@ -254,6 +293,7 @@ export function useChores(groupBy) {
 
             // 1. Process Overdue Penalties (-2 XP daily) and Rotate Incomplete Chores
             const choresToPenalize = rawChoreList.filter(c => {
+                if (c.last_reset_date === todayStr) return false; // Already reset or penalized today
                 if (!shouldPenalize(c)) return false;
                 
                 const updatedStr = getLocalYYYYMMDD(parsePBDate(c.updated));
@@ -264,67 +304,88 @@ export function useChores(groupBy) {
 
             if (choresToPenalize.length > 0) {
                 await Promise.all(choresToPenalize.map(async (c) => {
-                    const assignedIds = Array.isArray(c.assigned_to) ? c.assigned_to : (c.assigned_to ? [c.assigned_to] : []);
+                    // Fetch the latest chore state right before penalizing to prevent multi-client race conditions
+                    let latestChore;
+                    try {
+                        latestChore = await pb.collection('chores').getOne(c.id);
+                    } catch (e) {
+                        return; // Chore might have been deleted
+                    }
+                    const latestUpdatedStr = getLocalYYYYMMDD(parsePBDate(latestChore.updated));
+                    if (latestChore.last_reset_date === todayStr || latestUpdatedStr === todayStr || !shouldPenalize(latestChore)) {
+                        return; // Already penalized or handled by another client!
+                    }
+
+                    const assignedIds = getAssignedArray(latestChore.assigned_to);
                     const assignedProfiles = assignedIds.map(id => profileList.find(p => p.id === id || p.name === id)).filter(Boolean);
                     
-                    const isStrict = c.chore_name && c.chore_name.includes('[STRICT]');
+                    const isStrict = latestChore.chore_name && latestChore.chore_name.includes('[STRICT]');
                     const penaltyAmount = isStrict ? 5 : 2;
-                    let updateData = {};
+                    let updateData = {
+                        last_reset_date: todayStr
+                    };
 
-                    if (isStrict) {
-                        // Mark as completed so it disappears and resets naturally next week.
-                        updateData.is_completed = true;
+                    if (isStrict && latestChore.frequency !== 'daily') {
+                        // For non-daily strict chores (weekly, monthly, one-off):
+                        // Strict deadline was missed (-5 XP penalty).
+                        // Mark as skipped (NOT completed!), so it disappears and forfeits late completion
+                        // without falsely showing up as completed with a green checkmark.
+                        // Weekly/monthly strict chores will reset naturally on their next due date via choresToReset.
+                        updateData.is_skipped = true;
+                        updateData.is_completed = false;
                     } else {
+                        // For daily chores (both strict and regular) and non-strict recurring chores:
+                        // Penalty is deducted, but the task must NEVER be marked complete!
+                        // For daily chores, yesterday's deadline was missed, but today is a brand new day
+                        // where the task is active and pending (is_completed: false, is_skipped: false).
+                        updateData.is_completed = false;
+                        updateData.is_skipped = false;
+
                         // Toggle a trailing space to force PocketBase to update the timestamp
-                        const currentName = c.chore_name || '';
+                        const currentName = latestChore.chore_name || '';
                         updateData.chore_name = currentName.endsWith(' ') ? currentName.trimEnd() : currentName + ' ';
                         
-                        // Rotate incomplete chores if today is a due date
-                        let isDueToday = false;
-                        if (c.frequency === 'daily') {
-                            isDueToday = true;
-                        } else if (c.frequency === 'monthly' && c.due_dates) {
-                            let dates = [];
-                            if (Array.isArray(c.due_dates)) dates = c.due_dates.map(d => parseInt(String(d).trim(), 10));
-                            else if (typeof c.due_dates === 'string') dates = c.due_dates.split(',').map(d => parseInt(d.trim(), 10));
-                            isDueToday = dates.includes(now.getDate());
-                        } else if (c.frequency === 'weekly' && c.due_dates) {
-                            const todayName = Object.keys(dayMap).find(k => dayMap[k] === now.getDay());
-                            let dueDays = [];
-                            if (Array.isArray(c.due_dates)) dueDays = c.due_dates.map(d => String(d).trim());
-                            else if (typeof c.due_dates === 'string') dueDays = c.due_dates.split(',').map(d => d.trim());
-                            isDueToday = dueDays.includes(todayName);
-                        }
-
-                        if (isDueToday) {
-                            let pool = [];
-                            if (Array.isArray(c.round_robin_pool) && c.round_robin_pool.length > 0) {
-                                pool = c.round_robin_pool.map(val => {
-                                    const profile = profileList.find(p => p.id === val || p.name === val);
-                                    return profile ? profile.id : val;
-                                }).filter(Boolean);
-                            } else if (typeof c.round_robin_pool === 'string' && c.round_robin_pool.trim() !== '') {
-                                pool = c.round_robin_pool.split(',').map(val => {
-                                    const profile = profileList.find(p => p.id === val.trim() || p.name === val.trim());
-                                    return profile ? profile.id : val.trim();
-                                }).filter(Boolean);
-                            }
-                            
-                            if (pool.length > 1) {
-                                const currentAssignedId = Array.isArray(c.assigned_to) ? c.assigned_to[0] : c.assigned_to;
-                                const currentIdx = pool.indexOf(currentAssignedId);
-                                const nextIdx = currentIdx === -1 ? 0 : (currentIdx + 1) % pool.length;
-                                updateData.assigned_to = pool[nextIdx];
+                        // Rotate incomplete chores if rotation period elapsed or due date arrived
+                        const pool = getPoolArray(latestChore.round_robin_pool, profileList);
+                        if (pool.length > 1) {
+                            if (latestChore.frequency === 'daily') {
+                                const period = latestChore.rotation_period && latestChore.rotation_period > 0 ? latestChore.rotation_period : 3;
+                                const lastRotatedStr = latestChore.last_rotated || getLocalYYYYMMDD(parsePBDate(latestChore.created)) || todayStr;
+                                const daysElapsed = getDaysBetween(lastRotatedStr, todayStr);
+                                if (daysElapsed >= period) {
+                                    updateData.assigned_to = getNextAssignee(latestChore.assigned_to, pool);
+                                    updateData.last_rotated = todayStr;
+                                }
+                            } else {
+                                let isDueToday = false;
+                                if (latestChore.frequency === 'monthly' && latestChore.due_dates) {
+                                    let dates = [];
+                                    if (Array.isArray(latestChore.due_dates)) dates = latestChore.due_dates.map(d => parseInt(String(d).trim(), 10));
+                                    else if (typeof latestChore.due_dates === 'string') dates = latestChore.due_dates.split(',').map(d => parseInt(d.trim(), 10));
+                                    isDueToday = dates.includes(now.getDate());
+                                } else if (latestChore.frequency === 'weekly' && latestChore.due_dates) {
+                                    const todayName = Object.keys(dayMap).find(k => dayMap[k] === now.getDay());
+                                    let dueDays = [];
+                                    if (Array.isArray(latestChore.due_dates)) dueDays = latestChore.due_dates.map(d => String(d).trim());
+                                    else if (typeof latestChore.due_dates === 'string') dueDays = latestChore.due_dates.split(',').map(d => d.trim());
+                                    isDueToday = dueDays.includes(todayName);
+                                }
+                                if (isDueToday) {
+                                    updateData.assigned_to = getNextAssignee(latestChore.assigned_to, pool);
+                                    updateData.last_rotated = todayStr;
+                                }
                             }
                         }
                     }
 
-                    await pb.collection('chores').update(c.id, updateData);
+                    await pb.collection('chores').update(latestChore.id, updateData);
 
                     for (const profile of assignedProfiles) {
                         const latestProfile = await pb.collection('profiles').getOne(profile.id);
+                        const newBalance = Math.max(0, (latestProfile.xp_balance || 0) - penaltyAmount);
                         await pb.collection('profiles').update(profile.id, {
-                            xp_balance: Math.max(0, (latestProfile.xp_balance || 0) - penaltyAmount)
+                            xp_balance: newBalance,
+                            is_op: newBalance >= 100
                         });
                     }
                 }));
@@ -333,65 +394,87 @@ export function useChores(groupBy) {
                 return;
             }
 
-            // 1.5. Reset Completed/Skipped Recurring Chores
+            // 1.5. Reset Recurring Chores (Daily chores overnight reset; Weekly/Monthly when their due date arrives)
             const choresToReset = rawChoreList.filter(c => {
-                if (!(c.is_completed || c.is_skipped) || !c.frequency || c.frequency === 'none') return false;
-                const updatedStr = getLocalYYYYMMDD(parsePBDate(c.updated));
-                if (updatedStr === todayStr) return false; // Don't reset if just checked off today
+                if (!c.frequency || c.frequency === 'none') return false;
+                if (c.last_reset_date === todayStr) return false; // Already reset or penalized today
 
-                if (c.frequency === 'daily') return true;
+                const updatedStr = getLocalYYYYMMDD(parsePBDate(c.updated));
+                const createdStr = getLocalYYYYMMDD(parsePBDate(c.created));
+                if (createdStr === todayStr) return false; // Don't reset if created today
+
+                if (c.frequency === 'daily') {
+                    if (updatedStr === todayStr) return false; // Don't reset if just checked off or touched today
+                    return c.is_completed || c.is_skipped;
+                }
                 
                 if (!c.due_dates) return false;
 
+                // For weekly/monthly chores: reset when today matches scheduled due date
+                let isDueToday = false;
                 if (c.frequency === 'monthly') {
                     let dates = [];
                     if (Array.isArray(c.due_dates)) dates = c.due_dates.map(d => parseInt(String(d).trim(), 10));
                     else if (typeof c.due_dates === 'string') dates = c.due_dates.split(',').map(d => parseInt(d.trim(), 10));
-                    return dates.includes(now.getDate());
-                }
-
-                if (c.frequency === 'weekly') {
+                    isDueToday = dates.includes(now.getDate());
+                } else if (c.frequency === 'weekly') {
                     const todayName = Object.keys(dayMap).find(k => dayMap[k] === now.getDay());
                     let dueDays = [];
                     if (Array.isArray(c.due_dates)) dueDays = c.due_dates.map(d => String(d).trim());
                     else if (typeof c.due_dates === 'string') dueDays = c.due_dates.split(',').map(d => d.trim());
-                    return dueDays.includes(todayName);
+                    isDueToday = dueDays.includes(todayName);
                 }
 
-                return false;
+                if (!isDueToday) return false;
+                if (updatedStr === todayStr) return false; // Don't reset if already completed or updated today
+
+                // A new due date cycle has arrived (resets whether completed, skipped, or missed previously)
+                return true;
             });
 
             if (choresToReset.length > 0) {
-                await Promise.all(choresToReset.map(async (c, index) => {
-                    let updateData = { is_completed: false, is_skipped: false };
-                    let pool = [];
-                    if (Array.isArray(c.round_robin_pool) && c.round_robin_pool.length > 0) {
-                        pool = c.round_robin_pool.map(val => {
-                            const profile = profileList.find(p => p.id === val || p.name === val);
-                            return profile ? profile.id : val;
-                        }).filter(Boolean);
-                    } else if (typeof c.round_robin_pool === 'string' && c.round_robin_pool.trim() !== '') {
-                        pool = c.round_robin_pool.split(',').map(val => {
-                            const profile = profileList.find(p => p.id === val.trim() || p.name === val.trim());
-                            return profile ? profile.id : val.trim();
-                        }).filter(Boolean);
+                await Promise.all(choresToReset.map(async (c) => {
+                    let latestChore;
+                    try {
+                        latestChore = await pb.collection('chores').getOne(c.id);
+                    } catch (e) {
+                        return;
                     }
-                    
-                    if (pool.length > 1) {
-                        const currentAssignedId = Array.isArray(c.assigned_to) ? c.assigned_to[0] : c.assigned_to;
-                        const currentIdx = pool.indexOf(currentAssignedId);
-                        const nextIdx = currentIdx === -1 ? 0 : (currentIdx + 1) % pool.length;
-                        updateData.assigned_to = pool[nextIdx];
+                    if (latestChore.last_reset_date === todayStr) {
+                        return; // Handled by another client
                     }
 
-                    return pb.collection('chores').update(c.id, updateData);
+                    let updateData = { 
+                        is_completed: false, 
+                        is_skipped: false,
+                        last_reset_date: todayStr
+                    };
+
+                    const pool = getPoolArray(latestChore.round_robin_pool, profileList);
+                    if (pool.length > 1) {
+                        if (latestChore.frequency === 'daily') {
+                            const period = latestChore.rotation_period && latestChore.rotation_period > 0 ? latestChore.rotation_period : 3;
+                            const lastRotatedStr = latestChore.last_rotated || getLocalYYYYMMDD(parsePBDate(latestChore.created)) || todayStr;
+                            const daysElapsed = getDaysBetween(lastRotatedStr, todayStr);
+                            if (daysElapsed >= period) {
+                                updateData.assigned_to = getNextAssignee(latestChore.assigned_to, pool);
+                                updateData.last_rotated = todayStr;
+                            }
+                        } else {
+                            // Weekly/monthly chores rotate on their due date
+                            updateData.assigned_to = getNextAssignee(latestChore.assigned_to, pool);
+                            updateData.last_rotated = todayStr;
+                        }
+                    }
+
+                    return pb.collection('chores').update(latestChore.id, updateData);
                 }));
                 fetchData(); // Refetch cleanly
                 return;
             }
 
             // 1.5. Assign unassigned chores
-            const unassignedChores = rawChoreList.filter(c => !c.assigned_to || (Array.isArray(c.assigned_to) && c.assigned_to.length === 0));
+            const unassignedChores = rawChoreList.filter(c => getAssignedArray(c.assigned_to).length === 0);
             if (unassignedChores.length > 0) {
                 await Promise.all(unassignedChores.map(async (c, index) => {
                     let pool = [];
@@ -445,7 +528,18 @@ export function useChores(groupBy) {
 
             // Check Birthdays
             const todayMMDD = todayStr.substring(5); // "MM-DD"
-            const bdays = profileList.filter(p => p.birthday === todayMMDD);
+            const bdays = profileList.filter(p => {
+                if (!p.birthday) return false;
+                const clean = p.birthday.trim().split('T')[0].split(' ')[0];
+                const parts = clean.split('-');
+                if (parts.length === 3) {
+                    return `${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}` === todayMMDD;
+                }
+                if (parts.length === 2) {
+                    return `${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}` === todayMMDD;
+                }
+                return clean === todayMMDD;
+            });
             setBirthdayProfiles(bdays.map(p => p.name));
         } catch (err) {
             if (!err.isAbort) {
@@ -460,34 +554,15 @@ export function useChores(groupBy) {
 
     const toggleChore = async (choreId, currentStatus, isCovered = false) => {
         const chore = chores.find(c => c.id === choreId);
-        const assignedIds = Array.isArray(chore.assigned_to) ? chore.assigned_to : [chore.assigned_to];
+        const assignedIds = getAssignedArray(chore.assigned_to);
         const assignedProfiles = assignedIds.map(id => profiles.find(p => p.name === id || p.id === id)).filter(Boolean);
         const newStatus = !currentStatus;
 
-        // Keep track for rollback if needed
-        const xpChanges = {};
         const baseXP = (chore.xp_reward !== undefined && chore.xp_reward !== null) ? chore.xp_reward : 10;
 
         try {
-            // Optimistically update chores UI immediately
+            // Optimistically update chores UI immediately (score is intentionally delayed to wait for DB)
             setChores(prev => prev.map(c => c.id === choreId ? { ...c, is_completed: newStatus } : c));
-
-            // Optimistically update profiles UI immediately
-            if (assignedProfiles.length > 0 && !isCovered) {
-                setProfiles(prev => prev.map(p => {
-                    if (assignedProfiles.find(ap => ap.id === p.id)) {
-                        const isOp = p.is_op || todayHoliday !== null; 
-                        const earnedXP = isOp ? Math.floor(baseXP * 1.5) : baseXP;
-                        const newBalance = newStatus 
-                            ? (p.xp_balance || 0) + earnedXP 
-                            : Math.max(0, (p.xp_balance || 0) - earnedXP);
-                        
-                        xpChanges[p.id] = { xp_balance: p.xp_balance, is_op: p.is_op };
-                        return { ...p, xp_balance: newBalance, is_op: newBalance >= 100 };
-                    }
-                    return p;
-                }));
-            }
 
             // 1. Always update the chore status first
             await pb.collection('chores').update(choreId, { is_completed: newStatus });
@@ -497,8 +572,21 @@ export function useChores(groupBy) {
                 await Promise.all(assignedProfiles.map(async (profile) => {
                     // Fetch the latest profile to prevent race conditions from rapid toggling
                     const latestProfile = await pb.collection('profiles').getOne(profile.id);
-                    const isOp = latestProfile.is_op || todayHoliday !== null; 
-                    const earnedXP = isOp ? Math.floor(baseXP * 1.5) : baseXP;
+                    let earnedXP;
+                    if (newStatus) {
+                        const isOp = latestProfile.is_op || todayHoliday !== null; 
+                        earnedXP = isOp ? Math.floor(baseXP * 1.5) : baseXP;
+                    } else {
+                        if (todayHoliday !== null) {
+                            earnedXP = Math.floor(baseXP * 1.5);
+                        } else {
+                            if ((latestProfile.xp_balance || 0) - Math.floor(baseXP * 1.5) >= 100) {
+                                earnedXP = Math.floor(baseXP * 1.5);
+                            } else {
+                                earnedXP = baseXP;
+                            }
+                        }
+                    }
 
                     const newBalance = newStatus 
                         ? (latestProfile.xp_balance || 0) + earnedXP 
@@ -515,14 +603,6 @@ export function useChores(groupBy) {
         } catch (err) {
             // Revert optimistic update on failure
             setChores(prev => prev.map(c => c.id === choreId ? { ...c, is_completed: currentStatus } : c));
-            if (Object.keys(xpChanges).length > 0) {
-                setProfiles(prev => prev.map(p => {
-                    if (xpChanges[p.id]) {
-                        return { ...p, ...xpChanges[p.id] };
-                    }
-                    return p;
-                }));
-            }
             console.error("Update failed:", err);
         }
     };
@@ -547,27 +627,17 @@ export function useChores(groupBy) {
         const chore = chores.find(c => c.id === choreId);
         if (!chore) return;
         
-        let pool = [];
-        if (Array.isArray(chore.round_robin_pool) && chore.round_robin_pool.length > 0) {
-            pool = chore.round_robin_pool.map(val => {
-                const profile = profiles.find(p => p.id === val || p.name === val);
-                return profile ? profile.id : val;
-            }).filter(Boolean);
-        } else if (typeof chore.round_robin_pool === 'string' && chore.round_robin_pool.trim() !== '') {
-            pool = chore.round_robin_pool.split(',').map(val => {
-                const profile = profiles.find(p => p.id === val.trim() || p.name === val.trim());
-                return profile ? profile.id : val.trim();
-            }).filter(Boolean);
-        }
-        
+        const pool = getPoolArray(chore.round_robin_pool, profiles);
         if (pool.length > 1) {
-            const currentAssignedId = Array.isArray(chore.assigned_to) ? chore.assigned_to[0] : chore.assigned_to;
-            const currentIdx = pool.indexOf(currentAssignedId);
-            const nextIdx = currentIdx === -1 ? 0 : (currentIdx + 1) % pool.length;
-            const nextAssigneeId = pool[nextIdx];
+            const nextAssigneeId = getNextAssignee(chore.assigned_to, pool);
+            const todayStr = getLocalYYYYMMDD(new Date());
             
             try {
-                await pb.collection('chores').update(choreId, { assigned_to: nextAssigneeId });
+                await pb.collection('chores').update(choreId, { 
+                    assigned_to: nextAssigneeId,
+                    last_rotated: todayStr,
+                    last_reset_date: todayStr
+                });
                 fetchData(); // reload correctly to compute projections
             } catch (err) {
                 console.error("Rotate failed:", err);
@@ -577,26 +647,43 @@ export function useChores(groupBy) {
 
     useEffect(() => {
         fetchData();
+        
+        let timeoutId;
+        const debouncedFetch = () => {
+            clearTimeout(timeoutId);
+            timeoutId = setTimeout(() => {
+                fetchData();
+            }, 800);
+        };
+
         // Realtime subscriptions (works now that we're on Fly.io, not Ngrok)
-        pb.collection('chores').subscribe('*', fetchData);
-        pb.collection('profiles').subscribe('*', fetchData);
+        pb.collection('chores').subscribe('*', debouncedFetch);
+        pb.collection('profiles').subscribe('*', () => {
+            debouncedFetch();
+            window.dispatchEvent(new Event('profiles-updated'));
+        });
+        const handleProfilesUpdated = () => debouncedFetch();
+        window.addEventListener('profiles-updated', handleProfilesUpdated);
+        
         return () => {
+            clearTimeout(timeoutId);
             pb.collection('chores').unsubscribe();
             pb.collection('profiles').unsubscribe();
+            window.removeEventListener('profiles-updated', handleProfilesUpdated);
         };
     }, [fetchData]);
 
     // (Keep your groupedChores and sortedGroupEntries logic here)
     const expandedChores = chores.flatMap(c => {
         let resolvedName;
-        if (Array.isArray(c.assigned_to)) {
-            resolvedName = c.assigned_to.map(id => {
+        const cAssigned = getAssignedArray(c.assigned_to);
+        if (cAssigned.length > 0) {
+            resolvedName = cAssigned.map(id => {
                 const p = profiles.find(p => p.id === id || p.name === id);
                 return p ? p.name : id;
             }).join(', ');
         } else {
-            const p = profiles.find(p => p.id === c.assigned_to || p.name === c.assigned_to);
-            resolvedName = p ? p.name : c.assigned_to;
+            resolvedName = c.assigned_to;
         }
 
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -617,7 +704,7 @@ export function useChores(groupBy) {
                 }).filter(Boolean);
             }
 
-            const firstAssigned = Array.isArray(c.assigned_to) ? c.assigned_to[0] : c.assigned_to;
+            const firstAssigned = getAssignedArray(c.assigned_to)[0] || c.assigned_to;
             const firstAssignedP = profiles.find(p => p.id === firstAssigned || p.name === firstAssigned);
             const firstAssignedName = firstAssignedP ? firstAssignedP.name : firstAssigned;
             const currentIdx = pool.indexOf(firstAssignedName) === -1 ? 0 : pool.indexOf(firstAssignedName);
@@ -643,6 +730,10 @@ export function useChores(groupBy) {
             
             const parents = profiles.filter(p => p.is_parent);
             const parentName = parents.length > 0 ? parents[0].name : 'Mom/Dad';
+            const todayStr = getLocalYYYYMMDD(new Date());
+            const period = c.rotation_period && c.rotation_period > 0 ? c.rotation_period : 3;
+            const lastRotatedStr = c.last_rotated || getLocalYYYYMMDD(parsePBDate(c.created)) || todayStr;
+            const daysSinceRotation = Math.max(0, getDaysBetween(lastRotatedStr, todayStr));
 
             for (let i = 0; i < 7; i++) {
                 const targetDayIdx = (todayIdx + i) % 7;
@@ -671,9 +762,17 @@ export function useChores(groupBy) {
                     }
                 }
 
-                const projectedName = pool.length > 0 
-                    ? pool[(currentIdx + assignmentCounter) % pool.length] 
-                    : resolvedName;
+                let projectedName;
+                if (pool.length > 0) {
+                    if (c.frequency === 'daily') {
+                        const rotationStep = Math.floor((daysSinceRotation + i) / period) - Math.floor(daysSinceRotation / period);
+                        projectedName = pool[(currentIdx + rotationStep) % pool.length];
+                    } else {
+                        projectedName = pool[(currentIdx + assignmentCounter) % pool.length];
+                    }
+                } else {
+                    projectedName = resolvedName;
+                }
                 
                 let finalAssignee = pool.length > 0 ? projectedName : resolvedName;
                 

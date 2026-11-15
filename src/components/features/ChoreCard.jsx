@@ -23,9 +23,9 @@ export function ChoreCard({ chore, onToggle, onSkip, onRotate, layout = 'origina
                 layout === 'compact' ? 'p-4' : 
                 'p-6'
             } ${
-                chore.is_completed
+                !chore.is_future && chore.is_completed
                     ? 'border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/20 opacity-60 scale-[0.98]'
-                    : chore.is_skipped
+                    : !chore.is_future && chore.is_skipped
                         ? 'border-slate-300 dark:border-slate-800 bg-slate-100 dark:bg-slate-900/60 opacity-60 scale-[0.98]'
                         : chore.is_future
                             ? 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 opacity-70 cursor-not-allowed'
@@ -47,7 +47,7 @@ export function ChoreCard({ chore, onToggle, onSkip, onRotate, layout = 'origina
                             layout === 'compact' ? 'text-xl mb-1.5' :
                             layout === 'list' ? 'text-sm md:text-lg max-w-[60%]' :
                             'text-2xl mb-2'
-                        } ${(chore.is_completed || chore.is_skipped) ? 'line-through text-emerald-700 dark:text-emerald-700' : 'text-slate-800 dark:text-white drop-shadow-sm dark:drop-shadow-[0_0_5px_rgba(255,255,255,0.5)]'}`}>
+                        } ${(!chore.is_future && (chore.is_completed || chore.is_skipped)) ? 'line-through text-emerald-700 dark:text-emerald-700' : 'text-slate-800 dark:text-white drop-shadow-sm dark:drop-shadow-[0_0_5px_rgba(255,255,255,0.5)]'}`}>
                             {chore.chore_name.replace('[STRICT]', '').trim()}
                             {chore.chore_name.includes('[STRICT]') && (
                                 <span className="ml-3 inline-block align-top text-[10px] bg-rose-500/10 text-rose-500 dark:text-rose-400 border border-rose-500/50 px-1.5 py-0.5 rounded-sm uppercase tracking-widest shadow-sm">
@@ -59,7 +59,7 @@ export function ChoreCard({ chore, onToggle, onSkip, onRotate, layout = 'origina
                         <div className={`flex items-center gap-2 ${layout === 'list' ? 'mt-0 flex-shrink-0' : 'mt-1'}`}>
                             <p className={`tracking-[0.2em] font-bold ${
                                 layout === 'dense' || layout === 'list' ? 'text-[10px]' : 'text-sm'
-                            } ${(chore.is_completed || chore.is_skipped) ? 'text-emerald-700 dark:text-emerald-900' : 'text-fuchsia-600 dark:text-fuchsia-500'}`}>
+                            } ${(!chore.is_future && (chore.is_completed || chore.is_skipped)) ? 'text-emerald-700 dark:text-emerald-900' : 'text-fuchsia-600 dark:text-fuchsia-500'}`}>
                                 <span className="text-slate-400 dark:text-slate-600 mr-1">&gt;</span>
                                 {chore.assigned_to || 'UNASSIGNED'}
                             </p>
@@ -105,10 +105,13 @@ export function ChoreCard({ chore, onToggle, onSkip, onRotate, layout = 'origina
                                 <FastForward size={layout === 'dense' || layout === 'list' ? 16 : 20} />
                             </button>
                         )}
-                        {chore.is_completed ? (
+                        {!chore.is_future && chore.is_completed ? (
                             <CheckSquare size={layout === 'dense' || layout === 'list' ? 24 : 32} className="text-emerald-500 drop-shadow-sm dark:drop-shadow-[0_0_12px_rgba(16,185,129,0.8)]" />
                         ) : chore.is_future ? (
-                            <div className={`${layout === 'dense' || layout === 'list' ? 'w-6 h-6' : 'w-8 h-8'} border-2 border-slate-300 dark:border-slate-700 opacity-50`} />
+                            <div 
+                                className={`${layout === 'dense' || layout === 'list' ? 'w-6 h-6' : 'w-8 h-8'} border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-sm opacity-60`} 
+                                title="Upcoming task"
+                            />
                         ) : chore.is_skipped ? (
                             <FastForward size={layout === 'dense' || layout === 'list' ? 24 : 32} className="text-slate-500 drop-shadow-sm" />
                         ) : (

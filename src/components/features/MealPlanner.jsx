@@ -1,12 +1,25 @@
 import { useState } from 'react';
-import { Utensils, GripHorizontal, RotateCcw, AlertTriangle, Sparkles, CheckCircle2, History, Plus } from 'lucide-react';
+import { Utensils, GripHorizontal, RotateCcw, AlertTriangle, Sparkles, CheckCircle2, History, Plus, ChefHat } from 'lucide-react';
 import { useMeals } from '../../hooks/useMeals';
 
-export function MealPlanner() {
-    const { meals, cookedHistory, updateMeal, clearMeals, addToHistory, getRandomInspiration } = useMeals();
+export function MealPlanner({ profiles: propProfiles }) {
+    const { 
+        meals, 
+        cookedHistory, 
+        profiles: hookProfiles, 
+        updateMeal, 
+        toggleAssignee, 
+        clearMeals, 
+        addToHistory, 
+        getRandomInspiration 
+    } = useMeals();
+
+    const profilesList = (propProfiles && propProfiles.length > 0) ? propProfiles : hookProfiles;
+
     const [showConfirm, setShowConfirm] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
     const [inspiration, setInspiration] = useState(null);
+    const [cookedToast, setCookedToast] = useState(null);
 
     const handleClear = () => {
         clearMeals();
@@ -23,16 +36,28 @@ export function MealPlanner() {
 
     const handleCooked = (meal) => {
         addToHistory(meal);
+        setCookedToast(`Logged ${meal.day}: ${meal.main_dish}`);
+        setTimeout(() => setCookedToast(null), 3000);
     };
 
     const addFromHistory = (item) => {
-        // Find first empty day or just use today? 
-        // For simplicity, let's find the first empty 'main_dish'
+        // Find first empty day or today
         const emptyMeal = meals.find(m => !m.main_dish);
         if (emptyMeal) {
             updateMeal(emptyMeal.day, 'main_dish', item.main_dish);
             if (item.side_dish) updateMeal(emptyMeal.day, 'side_dish', item.side_dish);
+            if (item.assigned_to && item.assigned_to.length > 0) {
+                updateMeal(emptyMeal.day, 'assigned_to', item.assigned_to);
+            }
         }
+    };
+
+    const getAssignedNames = (assignedIds = []) => {
+        if (!assignedIds || assignedIds.length === 0) return '';
+        return assignedIds.map(id => {
+            const p = profilesList.find(p => p.id === id || p.name === id);
+            return p ? p.name : id;
+        }).join(', ');
     };
 
     return (
@@ -69,36 +94,71 @@ export function MealPlanner() {
                 </div>
             )}
 
+            {cookedToast && (
+                <div className="mb-4 p-2.5 bg-emerald-500/20 border border-emerald-500/50 text-emerald-400 text-xs font-bold uppercase tracking-widest animate-in slide-in-from-top duration-300 flex items-center gap-2">
+                    <CheckCircle2 size={14} className="text-emerald-400" />
+                    {cookedToast}
+                </div>
+            )}
+
             <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-4">
                     {meals.map((meal) => (
-                        <div key={meal.id} className="group flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4 p-2 border-b border-slate-200 dark:border-slate-800/60 focus-within:border-emerald-400 focus-within:dark:border-emerald-500/50 transition-colors pt-3 relative">
-                            <label className="text-xs font-black tracking-widest uppercase text-slate-500 dark:text-emerald-700 w-24 flex-none mt-1">
+                        <div key={meal.id} className="group flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4 p-3 rounded border border-slate-200 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-950/40 focus-within:border-emerald-400 focus-within:dark:border-emerald-500/50 transition-colors relative">
+                            <label className="text-xs font-black tracking-widest uppercase text-slate-500 dark:text-emerald-500 w-24 flex-none mt-1">
                                 {meal.day.substring(0, 3)}
                             </label>
+
                             <div className="flex-1 flex flex-col gap-2 w-full">
                                 <input
                                     type="text"
                                     value={meal.main_dish || ''}
                                     onChange={(e) => updateMeal(meal.day, 'main_dish', e.target.value)}
                                     placeholder="MAIN DISH"
-                                    className="w-full bg-transparent text-sm font-bold tracking-wider uppercase text-slate-800 dark:text-white focus:outline-none placeholder:text-slate-300 dark:placeholder:text-slate-600"
+                                    className="w-full bg-transparent text-sm font-bold tracking-wider uppercase text-slate-800 dark:text-white focus:outline-none placeholder:text-slate-300 dark:placeholder:text-slate-600 border-b border-transparent focus:border-slate-300 dark:focus:border-slate-700 pb-0.5"
                                 />
                                 <input
                                     type="text"
                                     value={meal.side_dish || ''}
                                     onChange={(e) => updateMeal(meal.day, 'side_dish', e.target.value)}
                                     placeholder="SIDE DISH / NOTES"
-                                    className="w-full bg-transparent text-xs font-bold tracking-wider uppercase text-slate-500 dark:text-slate-400 focus:outline-none placeholder:text-slate-200 dark:placeholder:text-slate-700"
+                                    className="w-full bg-transparent text-xs font-bold tracking-wider uppercase text-slate-500 dark:text-slate-400 focus:outline-none placeholder:text-slate-200 dark:placeholder:text-slate-700 pb-0.5"
                                 />
+
+                                {/* Family Member Assignment Section */}
+                                <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-200/60 dark:border-slate-800/60 mt-1">
+                                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1 mr-1">
+                                        <ChefHat size={12} className="text-emerald-500" />
+                                        Cook:
+                                    </span>
+                                    {profilesList.map(p => {
+                                        const isAssigned = (meal.assigned_to || []).includes(p.id) || (meal.assigned_to || []).includes(p.name);
+                                        return (
+                                            <button
+                                                key={p.id}
+                                                type="button"
+                                                onClick={() => toggleAssignee(meal.day, p.id)}
+                                                className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider transition-all border ${
+                                                    isAssigned
+                                                        ? 'bg-emerald-500 text-black border-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.4)] scale-[1.02]'
+                                                        : 'bg-white dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-800 hover:border-emerald-500/50 hover:text-emerald-600 dark:hover:text-emerald-300'
+                                                }`}
+                                                title={`Assign ${p.name}`}
+                                            >
+                                                {p.name}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
                             </div>
+
                             {meal.main_dish && (
                                 <button 
                                     onClick={() => handleCooked(meal)}
-                                    className="sm:opacity-0 group-hover:opacity-100 p-1 text-emerald-500 hover:text-emerald-400 transition-opacity"
+                                    className="sm:opacity-0 group-hover:opacity-100 p-1.5 text-emerald-500 hover:text-emerald-400 transition-opacity hover:bg-emerald-500/10 rounded flex-none"
                                     title="Mark as Cooked"
                                 >
-                                    <CheckCircle2 size={16} />
+                                    <CheckCircle2 size={18} />
                                 </button>
                             )}
                         </div>
@@ -120,14 +180,22 @@ export function MealPlanner() {
                                 <p className="text-[10px] text-slate-600 italic uppercase">No history data found</p>
                             ) : (
                                 cookedHistory.slice(0, 10).map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-emerald-950/10 border border-slate-200 dark:border-emerald-900/30">
-                                        <div className="min-w-0">
+                                    <div key={item.id} className="flex items-center justify-between p-2.5 bg-slate-50 dark:bg-emerald-950/10 border border-slate-200 dark:border-emerald-900/30 rounded">
+                                        <div className="min-w-0 flex-1 pr-3">
                                             <p className="text-xs font-bold text-slate-800 dark:text-emerald-100 uppercase truncate">{item.main_dish}</p>
-                                            <p className="text-[9px] text-slate-500 dark:text-emerald-700 uppercase truncate">{item.side_dish}</p>
+                                            {item.side_dish && (
+                                                <p className="text-[9px] text-slate-500 dark:text-emerald-700 uppercase truncate">{item.side_dish}</p>
+                                            )}
+                                            {item.assigned_to && item.assigned_to.length > 0 && (
+                                                <p className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1 mt-0.5">
+                                                    <ChefHat size={10} />
+                                                    {getAssignedNames(item.assigned_to)}
+                                                </p>
+                                            )}
                                         </div>
                                         <button 
                                             onClick={() => addFromHistory(item)}
-                                            className="p-1.5 text-emerald-500 hover:bg-emerald-500/10 transition-colors"
+                                            className="p-1.5 text-emerald-500 hover:bg-emerald-500/10 transition-colors rounded"
                                             title="Add to plan"
                                         >
                                             <Plus size={14} />

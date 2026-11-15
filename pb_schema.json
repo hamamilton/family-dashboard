@@ -9,7 +9,9 @@
       { "name": "is_op", "type": "bool", "required": false, "options": {} },
       { "name": "is_parent", "type": "bool", "required": false, "options": {} },
       { "name": "birthday", "type": "text", "required": false, "options": { "min": null, "max": null, "pattern": "" } },
-      { "name": "last_reset_month", "type": "text", "required": false, "options": { "min": null, "max": null, "pattern": "" } }
+      { "name": "last_reset_month", "type": "text", "required": false, "options": { "min": null, "max": null, "pattern": "" } },
+      { "name": "phone", "type": "text", "required": false, "options": { "min": null, "max": null, "pattern": "" } },
+      { "name": "carrier", "type": "text", "required": false, "options": { "min": null, "max": null, "pattern": "" } }
     ],
     "listRule": "", "viewRule": "", "createRule": "", "updateRule": "", "deleteRule": ""
   },

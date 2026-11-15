@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import { Calendar as CalendarIcon, Clock, Loader2, X, GripHorizontal, MapPin, Camera, CalendarDays } from 'lucide-react';
+import { useState, useRef, useMemo, useCallback } from 'react';
+import { Calendar as CalendarIcon, Clock, Loader2, X, GripHorizontal, MapPin, Camera, CalendarDays, Filter, CheckCircle2 } from 'lucide-react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import format from 'date-fns/format';
 import parse from 'date-fns/parse';
@@ -12,6 +12,7 @@ import 'react-datepicker/dist/react-datepicker.css';
 import { useCalendar, getEventMetadata } from '../../hooks/useCalendar';
 import { LocationAutocomplete } from '../features/LocationAutocomplete';
 import { SubscriptionsModal } from '../features/SubscriptionsModal';
+import { WeatherDayBadge } from '../features/WeatherDayBadge';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const locales = {
@@ -26,6 +27,18 @@ const localizer = dateFnsLocalizer({
   locales,
 });
 
+// Custom Header Component displaying Weekday and Daily Weather Forecast
+const CustomHeader = ({ date, label }) => {
+    return (
+        <div className="flex flex-col items-center justify-center py-1 gap-1">
+            <span className="font-mono text-xs font-black uppercase tracking-wider text-slate-700 dark:text-cyan-400">
+                {label}
+            </span>
+            <WeatherDayBadge date={date} compact={true} />
+        </div>
+    );
+};
+
 // Custom Event Component
 const EventComponent = ({ event, profiles }) => {
     const PROFILE_COLORS = ['bg-cyan-500', 'bg-fuchsia-500', 'bg-emerald-500', 'bg-violet-500', 'bg-rose-500', 'bg-blue-500'];
@@ -35,7 +48,11 @@ const EventComponent = ({ event, profiles }) => {
         ? event.assigned_to 
         : (event.assigned_to || 'Everyone').split(',').map(s => s.trim());
 
-    if (assignees.includes('Everyone') || assignees.length > 1) {
+    if (event.isHoliday) {
+        colorClass = 'bg-gradient-to-r from-amber-500 to-orange-500 shadow-[0_0_8px_rgba(245,158,11,0.4)] border border-amber-300';
+    } else if (event.isBirthday) {
+        colorClass = 'bg-gradient-to-r from-pink-500 to-rose-500 shadow-[0_0_8px_rgba(236,72,153,0.4)] border border-pink-300';
+    } else if (assignees.includes('Everyone') || assignees.length > 1) {
         colorClass = 'bg-amber-500';
     } else if (profiles && profiles.length > 0) {
         const profileIndex = profiles.findIndex(p => p.name === assignees[0]);
@@ -47,12 +64,18 @@ const EventComponent = ({ event, profiles }) => {
     const meta = getEventMetadata(event);
     const location = meta?.location || '';
 
+    const subtitle = event.isHoliday 
+        ? 'Public Holiday' 
+        : event.isBirthday 
+            ? 'Birthday' 
+            : assignees.join(', ');
+
     return (
         <div className={`p-1 text-xs font-black truncate rounded-sm ${colorClass} text-white shadow-sm h-full flex flex-col justify-between`}>
             <div className="flex flex-col overflow-hidden">
                 <span className="truncate">{event.title}</span>
                 <span className="text-[9px] font-bold uppercase opacity-90 truncate tracking-wider mt-0.5">
-                    {assignees.join(', ')}
+                    {subtitle}
                 </span>
             </div>
             {location && (
@@ -147,9 +170,12 @@ const CustomAgendaView = ({ events, date, localizer, length = 30, profiles, onSe
                 
                 return (
                     <div key={key} className="flex flex-col border border-slate-200 dark:border-cyan-900/50 rounded-xl overflow-hidden bg-white dark:bg-black shadow-sm">
-                        <div className="bg-slate-100 dark:bg-slate-900/50 p-3 border-b border-slate-200 dark:border-cyan-900/50 flex items-baseline gap-2">
-                            <h3 className="text-lg font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-widest">{dayName}</h3>
-                            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{dateNum}</span>
+                        <div className="bg-slate-100 dark:bg-slate-900/50 p-3 border-b border-slate-200 dark:border-cyan-900/50 flex items-center justify-between gap-2">
+                            <div className="flex items-baseline gap-2">
+                                <h3 className="text-lg font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-widest">{dayName}</h3>
+                                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{dateNum}</span>
+                            </div>
+                            <WeatherDayBadge date={group.dateObj} />
                         </div>
                         
                         <div className="p-3 flex flex-col gap-4">
@@ -221,15 +247,69 @@ CustomAgendaView.navigate = (date, action, { length = 30 }) => {
     return newDate;
 };
 
-import { useCallback, useMemo } from 'react';
-
 export function CalendarView({ profiles = [], isScreensaver = false }) {
-    const { events, subscriptions, loading, addEvent, addEvents, deleteEvent, updateEvent, addSubscription, removeSubscription } = useCalendar();
+    const { events, subscriptions, loading, addEvent, addEvents, deleteEvent, updateEvent, addSubscription, updateSubscription, removeSubscription } = useCalendar();
     
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [submitStatus, setSubmitStatus] = useState({ state: 'idle', message: '' });
+    const [showDeleteOptions, setShowDeleteOptions] = useState(false);
+
+    const closeModal = () => {
+        setIsModalOpen(false);
+        setSubmitStatus({ state: 'idle', message: '' });
+        setShowDeleteOptions(false);
+    };
+
     const [isSubModalOpen, setIsSubModalOpen] = useState(false);
     const [isScanning, setIsScanning] = useState(false);
     const fileInputRef = useRef(null);
+    const [activeFilters, setActiveFilters] = useState(['ALL']);
+
+    const toggleFilter = (name) => {
+        setActiveFilters(prev => {
+            if (name === 'ALL') return ['ALL'];
+            
+            let current = prev.filter(n => n !== 'ALL');
+            if (current.includes(name)) {
+                current = current.filter(n => n !== name);
+                return current.length === 0 ? ['ALL'] : current;
+            } else {
+                return [...current, name];
+            }
+        });
+    };
+
+    const filteredEvents = useMemo(() => {
+        if (!events || events.length === 0) return [];
+        if (activeFilters.includes('ALL') || activeFilters.length === 0) {
+            return events;
+        }
+
+        const personFiltersActive = activeFilters.some(f => f !== 'Holidays' && f !== 'Birthdays');
+
+        return events.filter(evt => {
+            if (evt.isHoliday) {
+                return activeFilters.includes('Holidays');
+            }
+
+            if (evt.isBirthday) {
+                if (activeFilters.includes('Birthdays')) return true;
+                const person = Array.isArray(evt.assigned_to) ? evt.assigned_to[0] : evt.assigned_to;
+                return activeFilters.includes(person);
+            }
+
+            const assignees = Array.isArray(evt.assigned_to) 
+                ? evt.assigned_to 
+                : (evt.assigned_to || 'Everyone').split(',').map(s => s.trim());
+
+            if (assignees.includes('Everyone')) {
+                return personFiltersActive;
+            }
+
+            return assignees.some(person => activeFilters.includes(person));
+        });
+    }, [events, activeFilters]);
+
     const [newEventData, setNewEventData] = useState({
         id: null,
         title: '',
@@ -240,7 +320,10 @@ export function CalendarView({ profiles = [], isScreensaver = false }) {
         seriesId: null,
         recurUntil: null,
         selectedDays: [],
-        location: ''
+        location: '',
+        readonly: false,
+        isHoliday: false,
+        isBirthday: false
     });
     const [view, setView] = useState('agenda');
     const [date, setDate] = useState(new Date());
@@ -256,8 +339,13 @@ export function CalendarView({ profiles = [], isScreensaver = false }) {
             seriesId: null,
             recurUntil: null,
             selectedDays: [],
-            location: ''
+            location: '',
+            readonly: false,
+            isHoliday: false,
+            isBirthday: false
         });
+        setSubmitStatus({ state: 'idle', message: '' });
+        setShowDeleteOptions(false);
         setIsModalOpen(true);
     };
 
@@ -277,8 +365,13 @@ export function CalendarView({ profiles = [], isScreensaver = false }) {
             seriesId: meta?.seriesId || null,
             recurUntil: meta?.recurUntil ? new Date(meta.recurUntil) : null,
             selectedDays: meta?.selectedDays || [],
-            location: meta?.location || ''
+            location: meta?.location || '',
+            readonly: !!event.readonly,
+            isHoliday: !!event.isHoliday,
+            isBirthday: !!event.isBirthday
         });
+        setSubmitStatus({ state: 'idle', message: '' });
+        setShowDeleteOptions(false);
         setIsModalOpen(true);
     }, []);
 
@@ -378,6 +471,7 @@ export function CalendarView({ profiles = [], isScreensaver = false }) {
                         selectedDays: [],
                         location: data.description || ''
                     });
+                    setSubmitStatus({ state: 'idle', message: '' });
                     setIsModalOpen(true);
                 } catch(err) {
                     console.error(err);
@@ -392,107 +486,155 @@ export function CalendarView({ profiles = [], isScreensaver = false }) {
         }
     };
 
-    const handleDelete = async () => {
+    const handleDelete = () => {
         if (newEventData.id) {
-            const isSeries = newEventData.isRecurring;
-            if (isSeries && !window.confirm('This is a recurring event. Delete entire series?')) {
-                // If they say no, just delete this one event
-                await deleteEvent(newEventData.id, false);
-            } else {
-                await deleteEvent(newEventData.id, isSeries);
-            }
-            setIsModalOpen(false);
+            setShowDeleteOptions(true);
+        }
+    };
+
+    const confirmDelete = async (deleteEntireSeries = false) => {
+        if (!newEventData.id) return;
+        setSubmitStatus({
+            state: 'submitting',
+            message: deleteEntireSeries ? 'Deleting entire series...' : 'Deleting event...'
+        });
+        try {
+            await deleteEvent(newEventData.id, deleteEntireSeries);
+            closeModal();
+        } catch (err) {
+            console.error('Failed to delete event:', err);
+            setSubmitStatus({ state: 'error', message: 'Failed to delete event. Please try again.' });
         }
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         
-        const isEditingSeries = newEventData.id && newEventData.isRecurring;
-        
-        let colorObj = {};
-        if (newEventData.isRecurring) {
-            colorObj = {
-                seriesId: newEventData.seriesId || `series-${Date.now()}`,
-                recurUntil: newEventData.recurUntil,
-                selectedDays: newEventData.selectedDays
-            };
-        }
-        if (newEventData.location) {
-            colorObj.location = newEventData.location;
-        }
-        
-        const colorData = Object.keys(colorObj).length > 0 ? JSON.stringify(colorObj) : '';
+        setSubmitStatus({
+            state: 'submitting',
+            message: newEventData.id ? 'Saving changes...' : 'Creating event...'
+        });
 
-        const assignedToJoined = Array.isArray(newEventData.assigned_to) ? newEventData.assigned_to.join(', ') : newEventData.assigned_to;
+        try {
+            const isEditingSeries = newEventData.id && newEventData.isRecurring;
+            
+            let colorObj = {};
+            if (newEventData.isRecurring) {
+                colorObj = {
+                    seriesId: newEventData.seriesId || `series-${Date.now()}`,
+                    recurUntil: newEventData.recurUntil,
+                    selectedDays: newEventData.selectedDays
+                };
+            }
+            if (newEventData.location) {
+                colorObj.location = newEventData.location;
+            }
+            
+            const colorData = Object.keys(colorObj).length > 0 ? JSON.stringify(colorObj) : '';
+            const assignedToJoined = Array.isArray(newEventData.assigned_to) ? newEventData.assigned_to.join(', ') : newEventData.assigned_to;
 
-        if (newEventData.id && !isEditingSeries) {
-            updateEvent(newEventData.id, {
-                title: newEventData.title,
-                start: newEventData.start,
-                end: newEventData.end,
-                assigned_to: assignedToJoined,
-                color: colorData
-            });
-        } else if (newEventData.isRecurring) {
-            if (isEditingSeries) {
-                // To update a series, delete old and generate new
-                if (!window.confirm('Update entire recurring series? This will regenerate all future instances.')) {
-                    // Just update single event
-                    updateEvent(newEventData.id, {
+            let confirmationMsg = newEventData.id ? 'Changes saved successfully!' : 'Event created successfully!';
+
+            if (newEventData.id && !isEditingSeries) {
+                await updateEvent(newEventData.id, {
+                    title: newEventData.title,
+                    start: newEventData.start,
+                    end: newEventData.end,
+                    assigned_to: assignedToJoined,
+                    color: colorData
+                });
+            } else if (newEventData.isRecurring) {
+                if (isEditingSeries) {
+                    // To update a series, delete old and generate new
+                    if (!window.confirm('Update entire recurring series? This will regenerate all future instances.')) {
+                        // Just update single event
+                        await updateEvent(newEventData.id, {
+                            title: newEventData.title,
+                            start: newEventData.start,
+                            end: newEventData.end,
+                            assigned_to: assignedToJoined,
+                            color: '' // remove series link from this one
+                        });
+                        setSubmitStatus({ state: 'success', message: 'Event updated successfully!' });
+                        setTimeout(() => {
+                            closeModal();
+                        }, 1200);
+                        return;
+                    }
+                    await deleteEvent(newEventData.id, true);
+                }
+                
+                const startD = new Date(newEventData.start);
+                const endD = new Date(newEventData.end);
+                
+                let daysToUse = newEventData.selectedDays;
+                if (!daysToUse || daysToUse.length === 0) {
+                    daysToUse = [startD.getDay()];
+                }
+
+                let untilD;
+                if (newEventData.recurUntil) {
+                    untilD = new Date(newEventData.recurUntil);
+                } else {
+                    untilD = new Date(startD);
+                    untilD.setMonth(untilD.getMonth() + 2);
+                }
+                untilD.setHours(23, 59, 59, 999);
+                
+                const generatedEvents = [];
+                let current = new Date(startD);
+                current.setHours(0, 0, 0, 0);
+                
+                while (current <= untilD) {
+                    if (daysToUse.includes(current.getDay())) {
+                        const eStart = new Date(current);
+                        eStart.setHours(startD.getHours(), startD.getMinutes(), 0, 0);
+                        
+                        const eEnd = new Date(current);
+                        eEnd.setHours(endD.getHours(), endD.getMinutes(), 0, 0);
+
+                        if (eStart <= untilD) {
+                            generatedEvents.push({
+                                title: newEventData.title,
+                                start: eStart,
+                                end: eEnd,
+                                assigned_to: assignedToJoined,
+                                color: colorData
+                            });
+                        }
+                    }
+                    current.setDate(current.getDate() + 1);
+                }
+                if (generatedEvents.length > 0) {
+                    await addEvents(generatedEvents);
+                    confirmationMsg = `Recurring series created (${generatedEvents.length} events scheduled)!`;
+                } else {
+                    await addEvent({
                         title: newEventData.title,
                         start: newEventData.start,
                         end: newEventData.end,
                         assigned_to: assignedToJoined,
-                        color: '' // remove series link from this one
+                        color: colorData
                     });
-                    setIsModalOpen(false);
-                    return;
                 }
-                await deleteEvent(newEventData.id, true);
+            } else {
+                await addEvent({
+                    title: newEventData.title,
+                    start: newEventData.start,
+                    end: newEventData.end,
+                    assigned_to: assignedToJoined,
+                    color: colorData
+                });
             }
-            
-            const startD = newEventData.start;
-            const endD = newEventData.end;
-            const untilD = new Date(newEventData.recurUntil);
-            untilD.setHours(23, 59, 59, 999);
-            
-            const generatedEvents = [];
-            let current = new Date(startD);
-            
-            while (current <= untilD) {
-                if (newEventData.selectedDays.includes(current.getDay())) {
-                    const eStart = new Date(current);
-                    eStart.setHours(startD.getHours(), startD.getMinutes(), 0, 0);
-                    
-                    const eEnd = new Date(current);
-                    eEnd.setHours(endD.getHours(), endD.getMinutes(), 0, 0);
 
-                    if (eStart <= untilD) {
-                        generatedEvents.push({
-                            title: newEventData.title,
-                            start: eStart,
-                            end: eEnd,
-                            assigned_to: assignedToJoined,
-                            color: colorData
-                        });
-                    }
-                }
-                current.setDate(current.getDate() + 1);
-            }
-            if (generatedEvents.length > 0) {
-                addEvents(generatedEvents);
-            }
-        } else {
-            addEvent({
-                title: newEventData.title,
-                start: newEventData.start,
-                end: newEventData.end,
-                assigned_to: assignedToJoined,
-                color: colorData
-            });
+            setSubmitStatus({ state: 'success', message: confirmationMsg });
+            setTimeout(() => {
+                closeModal();
+            }, 1200);
+        } catch (err) {
+            console.error("Failed to save event:", err);
+            setSubmitStatus({ state: 'error', message: 'Failed to save event. Please try again.' });
         }
-        setIsModalOpen(false);
     };
 
     const toggleAssignee = (name) => {
@@ -597,16 +739,95 @@ export function CalendarView({ profiles = [], isScreensaver = false }) {
                 )}
             </div>
 
+            {/* Member & Category Filter Pills */}
+            {!isScreensaver && (
+                <div className="flex flex-wrap items-center gap-2 mb-4 p-2.5 bg-slate-100/80 dark:bg-slate-900/50 border border-slate-200 dark:border-cyan-900/40 rounded-lg flex-none font-mono shadow-sm">
+                    <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-cyan-400 mr-1">
+                        <Filter size={13} className="text-cyan-500" />
+                        <span>Filter:</span>
+                    </div>
+
+                    {/* All Pill */}
+                    <button
+                        onClick={() => toggleFilter('ALL')}
+                        className={`px-3 py-1 rounded text-xs font-black uppercase tracking-wider transition-all border ${
+                            activeFilters.includes('ALL')
+                                ? 'bg-cyan-500 text-black border-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.3)]'
+                                : 'bg-white dark:bg-black/50 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-800 hover:border-cyan-500/50'
+                        }`}
+                    >
+                        All
+                    </button>
+
+                    {/* Member Pills */}
+                    {profiles.map((p, idx) => {
+                        const isActive = !activeFilters.includes('ALL') && activeFilters.includes(p.name);
+                        const colors = ['bg-cyan-500', 'bg-fuchsia-500', 'bg-emerald-500', 'bg-violet-500', 'bg-rose-500', 'bg-blue-500'];
+                        const colorClass = colors[idx % colors.length];
+                        return (
+                            <button
+                                key={p.id || p.name}
+                                onClick={() => toggleFilter(p.name)}
+                                className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-black uppercase tracking-wider transition-all border ${
+                                    isActive
+                                        ? `${colorClass} text-white border-white/40 shadow-sm scale-105`
+                                        : 'bg-white dark:bg-black/50 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-800 hover:border-slate-600'
+                                }`}
+                            >
+                                <span className={`w-2 h-2 rounded-full ${isActive ? 'bg-white' : colorClass}`} />
+                                <span>{p.name}</span>
+                            </button>
+                        );
+                    })}
+
+                    {/* Holidays Pill */}
+                    <button
+                        onClick={() => toggleFilter('Holidays')}
+                        className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-black uppercase tracking-wider transition-all border ${
+                            !activeFilters.includes('ALL') && activeFilters.includes('Holidays')
+                                ? 'bg-amber-500 text-black border-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.3)] scale-105'
+                                : 'bg-white dark:bg-black/50 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-800 hover:border-amber-500/50'
+                        }`}
+                    >
+                        <span>🎉</span>
+                        <span>Holidays</span>
+                    </button>
+
+                    {/* Birthdays Pill */}
+                    <button
+                        onClick={() => toggleFilter('Birthdays')}
+                        className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-black uppercase tracking-wider transition-all border ${
+                            !activeFilters.includes('ALL') && activeFilters.includes('Birthdays')
+                                ? 'bg-pink-500 text-white border-pink-300 shadow-[0_0_10px_rgba(236,72,153,0.3)] scale-105'
+                                : 'bg-white dark:bg-black/50 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-800 hover:border-pink-500/50'
+                        }`}
+                    >
+                        <span>🎂</span>
+                        <span>Birthdays</span>
+                    </button>
+
+                    {!activeFilters.includes('ALL') && (
+                        <button
+                            onClick={() => toggleFilter('ALL')}
+                            className="text-[10px] text-cyan-600 dark:text-cyan-400 hover:underline uppercase font-bold tracking-wider ml-auto"
+                        >
+                            Reset Filter
+                        </button>
+                    )}
+                </div>
+            )}
+
             <div className={`flex-1 min-h-0 bg-white dark:bg-black p-6 border-2 border-slate-300 dark:border-cyan-900 shadow-lg dark:shadow-[0_0_30px_rgba(34,211,238,0.1)] custom-calendar-wrapper`}>
                 <Calendar
                     localizer={localizer}
-                    events={events}
+                    events={filteredEvents}
                     profiles={profiles}
                     startAccessor="start"
                     endAccessor="end"
                     style={{ height: '100%' }}
                     components={{
-                        event: (props) => <EventComponent {...props} profiles={profiles} />
+                        event: (props) => <EventComponent {...props} profiles={profiles} />,
+                        header: CustomHeader
                     }}
                     views={calendarViews}
                     selectable={true}
@@ -623,68 +844,95 @@ export function CalendarView({ profiles = [], isScreensaver = false }) {
 
             {/* Modal */}
             {isModalOpen && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-white dark:bg-slate-950 border-2 border-cyan-400 p-8 w-full max-w-md shadow-[0_0_30px_rgba(34,211,238,0.2)]" style={{ clipPath: 'polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px)' }}>
-                        <div className="flex justify-between items-center mb-6 border-b border-slate-200 dark:border-slate-800 pb-4">
-                            <h3 className="text-xl font-black uppercase tracking-widest text-slate-800 dark:text-white">
+                <div 
+                    className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-start justify-center z-50 p-2 sm:p-4 md:p-6 overflow-y-auto custom-scrollbar"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) closeModal();
+                    }}
+                >
+                    <div 
+                        className="bg-white dark:bg-slate-950 border-2 border-cyan-400 w-full max-w-lg shadow-[0_0_30px_rgba(34,211,238,0.3)] my-2 sm:my-4 flex flex-col relative animate-in fade-in slide-in-from-top-4 duration-300" 
+                        style={{ clipPath: 'polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px)' }}
+                    >
+                        {/* Sticky Modal Header at Top */}
+                        <div className="sticky top-0 bg-white dark:bg-slate-950 z-20 flex justify-between items-center px-4 sm:px-6 py-3.5 border-b border-slate-200 dark:border-slate-800">
+                            <h3 className="text-lg sm:text-xl font-black uppercase tracking-widest text-slate-800 dark:text-white flex items-center gap-2">
+                                <span className="h-2 w-2 rounded-full bg-cyan-400"></span>
                                 {newEventData.id ? 'Update Event' : 'Add Event'}
                             </h3>
-                            <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-fuchsia-500 transition-colors">
-                                <X size={24} />
+                            <button 
+                                onClick={closeModal} 
+                                className="p-1.5 text-slate-400 hover:text-fuchsia-500 rounded-md transition-colors hover:bg-slate-100 dark:hover:bg-slate-900"
+                                title="Close"
+                            >
+                                <X size={22} />
                             </button>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+                        <form onSubmit={handleSubmit} className="p-4 sm:p-6 flex flex-col gap-4 sm:gap-5">
+                            {newEventData.readonly && (
+                                <div className="p-3 bg-amber-500/10 border border-amber-500/40 text-amber-500 dark:text-amber-400 text-xs font-bold uppercase tracking-wider rounded flex items-center gap-2">
+                                    <span>ℹ️</span>
+                                    <span>
+                                        {newEventData.isHoliday
+                                            ? 'Read-Only: National Holiday is automated.'
+                                            : newEventData.isBirthday
+                                                ? 'Read-Only: Family Birthday is automated.'
+                                                : 'External Calendar Feed: Event details are synced from the feed, but you can assign participants below for display.'}
+                                    </span>
+                                </div>
+                            )}
                             <div>
-                                <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-cyan-600 mb-2">Event Title</label>
+                                <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-cyan-500 mb-1.5">Event Title</label>
                                 <input 
                                     type="text" 
                                     required
+                                    autoFocus
                                     value={newEventData.title}
                                     onChange={e => setNewEventData({...newEventData, title: e.target.value})}
-                                    className="w-full bg-slate-50 dark:bg-black border border-slate-300 dark:border-slate-800 p-3 text-slate-800 dark:text-white focus:outline-none focus:border-cyan-400 transition-colors"
+                                    className="w-full bg-slate-50 dark:bg-black border border-slate-300 dark:border-slate-800 p-2.5 sm:p-3 text-slate-800 dark:text-white focus:outline-none focus:border-cyan-400 transition-colors text-sm"
                                     placeholder="E.g., Dentist Appointment"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-cyan-600 mb-2">Location / Address</label>
+                                <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-cyan-500 mb-1.5">Location / Address</label>
                                 <LocationAutocomplete 
                                     value={newEventData.location}
                                     onChange={(val) => setNewEventData({...newEventData, location: val})}
                                 />
                             </div>
 
-                            <div className="flex flex-col gap-6">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                 <div>
-                                    <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-cyan-600 mb-2">Start</label>
+                                    <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-cyan-500 mb-1.5">Start</label>
                                     <DatePicker 
                                         selected={newEventData.start}
                                         onChange={(date) => setNewEventData({...newEventData, start: date})}
                                         showTimeSelect
                                         dateFormat="MMM d, yyyy h:mm aa"
-                                        className="w-full bg-slate-50 dark:bg-black border border-slate-300 dark:border-slate-800 p-3 text-sm text-slate-800 dark:text-white focus:outline-none focus:border-cyan-400 transition-colors"
+                                        className="w-full bg-slate-50 dark:bg-black border border-slate-300 dark:border-slate-800 p-2.5 sm:p-3 text-xs sm:text-sm text-slate-800 dark:text-white focus:outline-none focus:border-cyan-400 transition-colors"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-cyan-600 mb-2">End</label>
+                                    <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-cyan-500 mb-1.5">End</label>
                                     <DatePicker 
                                         selected={newEventData.end}
                                         onChange={(date) => setNewEventData({...newEventData, end: date})}
                                         showTimeSelect
                                         dateFormat="MMM d, yyyy h:mm aa"
-                                        className="w-full bg-slate-50 dark:bg-black border border-slate-300 dark:border-slate-800 p-3 text-sm text-slate-800 dark:text-white focus:outline-none focus:border-cyan-400 transition-colors"
+                                        className="w-full bg-slate-50 dark:bg-black border border-slate-300 dark:border-slate-800 p-2.5 sm:p-3 text-xs sm:text-sm text-slate-800 dark:text-white focus:outline-none focus:border-cyan-400 transition-colors"
                                     />
                                 </div>
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-cyan-600 mb-2">Participant</label>
+                                <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-cyan-500 mb-1.5">Participant</label>
                                 <div className="flex flex-wrap gap-1.5">
                                     <button 
                                         type="button"
                                         onClick={() => toggleAssignee('Everyone')}
-                                        className={`px-3 py-1.5 text-xs font-black uppercase border transition-colors ${
+                                        className={`px-2.5 py-1 text-xs font-black uppercase border transition-colors ${
                                             newEventData.assigned_to.includes('Everyone')
                                                 ? 'border-amber-400 bg-amber-400/10 text-amber-500'
                                                 : 'border-slate-300 dark:border-slate-700 text-slate-500 hover:border-amber-400'
@@ -699,7 +947,7 @@ export function CalendarView({ profiles = [], isScreensaver = false }) {
                                                 key={p.id} 
                                                 type="button"
                                                 onClick={() => toggleAssignee(p.name)}
-                                                className={`px-3 py-1.5 text-xs font-black uppercase border transition-colors ${
+                                                className={`px-2.5 py-1 text-xs font-black uppercase border transition-colors ${
                                                     isSelected
                                                         ? 'border-cyan-400 bg-cyan-400/10 text-cyan-500'
                                                         : 'border-slate-300 dark:border-slate-700 text-slate-500 hover:border-cyan-400'
@@ -712,33 +960,44 @@ export function CalendarView({ profiles = [], isScreensaver = false }) {
                                 </div>
                             </div>
 
-                            <div className="mt-2">
-                                <label className="flex items-center gap-3 cursor-pointer">
+                            <div className="pt-1">
+                                <label className="flex items-center gap-2.5 cursor-pointer">
                                     <input 
                                         type="checkbox"
                                         checked={newEventData.isRecurring}
-                                        onChange={e => setNewEventData({...newEventData, isRecurring: e.target.checked})}
-                                        className="w-5 h-5 text-cyan-500 bg-slate-100 dark:bg-slate-900 border-slate-300 dark:border-cyan-800 rounded focus:ring-cyan-500 focus:ring-2 transition-all cursor-pointer accent-cyan-500"
+                                        onChange={e => {
+                                            const isRec = e.target.checked;
+                                            const defaultUntil = new Date(newEventData.start || new Date());
+                                            defaultUntil.setMonth(defaultUntil.getMonth() + 2);
+                                            const dayIdx = (newEventData.start ? new Date(newEventData.start) : new Date()).getDay();
+                                            setNewEventData(prev => ({
+                                                ...prev,
+                                                isRecurring: isRec,
+                                                selectedDays: prev.selectedDays?.length ? prev.selectedDays : [dayIdx],
+                                                recurUntil: prev.recurUntil || defaultUntil
+                                            }));
+                                        }}
+                                        className="w-4 h-4 text-cyan-500 bg-slate-100 dark:bg-slate-900 border-slate-300 dark:border-cyan-800 rounded focus:ring-cyan-500 focus:ring-2 transition-all cursor-pointer accent-cyan-500"
                                     />
                                     <span className="text-xs font-bold uppercase tracking-widest text-slate-600 dark:text-cyan-500">Recurring Event</span>
                                 </label>
                             </div>
 
                             {newEventData.isRecurring && (
-                                <div className="flex flex-col gap-4 border-l-4 border-cyan-500 pl-4 py-2 bg-slate-50 dark:bg-cyan-950/10">
+                                <div className="flex flex-col gap-3 border-l-2 border-cyan-500 pl-3 py-2 bg-slate-50 dark:bg-cyan-950/10">
                                     <div className="flex flex-col">
-                                        <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-cyan-700 mb-2">Repeat Until</label>
+                                        <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-cyan-700 mb-1">Repeat Until</label>
                                         <DatePicker 
                                             selected={newEventData.recurUntil}
                                             onChange={(date) => setNewEventData({...newEventData, recurUntil: date})}
                                             dateFormat="MMM d, yyyy"
-                                            className="w-full bg-white dark:bg-black border border-slate-300 dark:border-slate-800 p-3 text-sm text-slate-800 dark:text-white focus:outline-none focus:border-cyan-400 transition-colors"
+                                            className="w-full bg-white dark:bg-black border border-slate-300 dark:border-slate-800 p-2 text-xs text-slate-800 dark:text-white focus:outline-none focus:border-cyan-400 transition-colors"
                                             placeholderText="Select end date"
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-cyan-700 mb-2">On Days</label>
-                                        <div className="flex flex-wrap gap-2">
+                                        <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-cyan-700 mb-1">On Days</label>
+                                        <div className="flex flex-wrap gap-1.5">
                                             {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => (
                                                 <button
                                                     key={day}
@@ -749,10 +1008,10 @@ export function CalendarView({ profiles = [], isScreensaver = false }) {
                                                             : [...newEventData.selectedDays, idx];
                                                         setNewEventData({...newEventData, selectedDays: days});
                                                     }}
-                                                    className={`px-3 py-2 text-xs font-black uppercase tracking-wider border transition-colors ${
+                                                    className={`px-2 py-1 text-[11px] font-black uppercase tracking-wider border transition-colors ${
                                                         newEventData.selectedDays.includes(idx) 
                                                         ? 'bg-cyan-500 text-black border-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.4)]' 
-                                                        : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-300 dark:border-slate-700 hover:border-cyan-500 dark:hover:border-cyan-500'
+                                                        : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-300 dark:border-slate-700 hover:border-cyan-500'
                                                     }`}
                                                 >
                                                     {day}
@@ -763,25 +1022,150 @@ export function CalendarView({ profiles = [], isScreensaver = false }) {
                                 </div>
                             )}
 
-                            <div className="flex gap-4 mt-4">
-                                {newEventData.id && (
-                                    <button 
-                                        type="button" 
-                                        onClick={handleDelete}
-                                        className="flex-1 bg-transparent border-2 border-rose-500 text-rose-500 font-black uppercase tracking-widest py-4 hover:bg-rose-500 hover:text-white transition-colors"
-                                        style={{ clipPath: 'polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)' }}
+                            {/* Feedback Notifications */}
+                            {submitStatus.state === 'success' && (
+                                <div className="p-3 bg-emerald-500/15 border-2 border-emerald-500 text-emerald-400 text-xs sm:text-sm font-bold uppercase tracking-wider rounded flex items-center gap-2.5 animate-in fade-in slide-in-from-bottom-2 duration-200 shadow-[0_0_20px_rgba(16,185,129,0.3)]">
+                                    <CheckCircle2 size={18} className="text-emerald-400 shrink-0" />
+                                    <span>{submitStatus.message}</span>
+                                </div>
+                            )}
+
+                            {submitStatus.state === 'error' && (
+                                <div className="p-3 bg-rose-500/15 border-2 border-rose-500 text-rose-400 text-xs sm:text-sm font-bold uppercase tracking-wider rounded flex items-center gap-2.5 animate-in fade-in duration-200">
+                                    <X size={18} className="text-rose-400 shrink-0" />
+                                    <span>{submitStatus.message}</span>
+                                </div>
+                            )}
+
+                            {/* Action Buttons */}
+                            {newEventData.readonly ? (
+                                <div className="flex gap-3 pt-2">
+                                    <button
+                                        type="button"
+                                        onClick={closeModal}
+                                        className="flex-1 bg-slate-800 text-slate-200 font-black uppercase tracking-widest py-3 text-xs hover:bg-slate-700 transition-colors"
+                                        style={{ clipPath: 'polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px)' }}
                                     >
-                                        Delete
+                                        Close
                                     </button>
-                                )}
-                                <button 
-                                    type="submit" 
-                                    className="flex-1 bg-cyan-500 text-black font-black uppercase tracking-widest py-4 hover:bg-cyan-400 transition-colors shadow-[0_0_15px_rgba(34,211,238,0.4)]"
-                                    style={{ clipPath: 'polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)' }}
-                                >
-                                    {newEventData.id ? 'Save' : 'Create'}
-                                </button>
-                            </div>
+                                    {typeof newEventData.id === 'string' && newEventData.id.startsWith('ical-') && (
+                                        <button
+                                            type="submit"
+                                            disabled={submitStatus.state === 'submitting' || submitStatus.state === 'success'}
+                                            className={`flex-1 font-black uppercase tracking-widest py-3 text-xs transition-all flex items-center justify-center gap-2 ${
+                                                submitStatus.state === 'success'
+                                                    ? 'bg-emerald-500 text-black shadow-[0_0_20px_rgba(16,185,129,0.5)]'
+                                                    : submitStatus.state === 'submitting'
+                                                        ? 'bg-cyan-600 text-black opacity-80 cursor-wait'
+                                                        : 'bg-cyan-500 text-black hover:bg-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.4)]'
+                                            }`}
+                                            style={{ clipPath: 'polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px)' }}
+                                        >
+                                            {submitStatus.state === 'submitting' && <Loader2 size={14} className="animate-spin" />}
+                                            {submitStatus.state === 'success' && <CheckCircle2 size={14} />}
+                                            {submitStatus.state === 'submitting'
+                                                ? 'Saving...'
+                                                : submitStatus.state === 'success'
+                                                    ? 'Saved!'
+                                                    : 'Save Participant'}
+                                        </button>
+                                    )}
+                                </div>
+                            ) : showDeleteOptions ? (
+                                <div className="p-3 bg-rose-950/30 border-2 border-rose-500/60 rounded flex flex-col gap-2.5 animate-in fade-in duration-150">
+                                    <div className="text-xs font-black uppercase tracking-widest text-rose-400">
+                                        {newEventData.isRecurring || newEventData.seriesId
+                                            ? 'Delete Recurring Event — Choose Scope:'
+                                            : 'Confirm Delete Event?'}
+                                    </div>
+                                    {newEventData.isRecurring || newEventData.seriesId ? (
+                                        <div className="flex flex-col sm:flex-row gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => confirmDelete(false)}
+                                                disabled={submitStatus.state === 'submitting'}
+                                                className="flex-1 bg-amber-500 text-black font-black uppercase tracking-widest py-2.5 px-3 text-[11px] hover:bg-amber-400 transition-colors disabled:opacity-40"
+                                                style={{ clipPath: 'polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px)' }}
+                                            >
+                                                Delete This Event Only
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => confirmDelete(true)}
+                                                disabled={submitStatus.state === 'submitting'}
+                                                className="flex-1 bg-rose-600 text-white font-black uppercase tracking-widest py-2.5 px-3 text-[11px] hover:bg-rose-500 transition-colors disabled:opacity-40"
+                                                style={{ clipPath: 'polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px)' }}
+                                            >
+                                                Delete Entire Series
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowDeleteOptions(false)}
+                                                disabled={submitStatus.state === 'submitting'}
+                                                className="bg-slate-800 text-slate-200 font-black uppercase tracking-widest py-2.5 px-4 text-[11px] hover:bg-slate-700 transition-colors disabled:opacity-40"
+                                                style={{ clipPath: 'polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px)' }}
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="flex gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => confirmDelete(false)}
+                                                disabled={submitStatus.state === 'submitting'}
+                                                className="flex-1 bg-rose-600 text-white font-black uppercase tracking-widest py-2.5 px-3 text-xs hover:bg-rose-500 transition-colors disabled:opacity-40"
+                                                style={{ clipPath: 'polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px)' }}
+                                            >
+                                                Confirm Delete
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowDeleteOptions(false)}
+                                                disabled={submitStatus.state === 'submitting'}
+                                                className="flex-1 bg-slate-800 text-slate-200 font-black uppercase tracking-widest py-2.5 px-3 text-xs hover:bg-slate-700 transition-colors disabled:opacity-40"
+                                                style={{ clipPath: 'polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px)' }}
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="flex gap-3 pt-2">
+                                    {newEventData.id && (
+                                        <button 
+                                            type="button" 
+                                            onClick={handleDelete}
+                                            disabled={submitStatus.state === 'submitting' || submitStatus.state === 'success'}
+                                            className="flex-1 bg-transparent border-2 border-rose-500 text-rose-500 font-black uppercase tracking-widest py-3 text-xs hover:bg-rose-500 hover:text-white transition-colors disabled:opacity-40"
+                                            style={{ clipPath: 'polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px)' }}
+                                        >
+                                            Delete
+                                        </button>
+                                    )}
+                                    <button 
+                                        type="submit" 
+                                        disabled={submitStatus.state === 'submitting' || submitStatus.state === 'success'}
+                                        className={`flex-1 font-black uppercase tracking-widest py-3 text-xs transition-all flex items-center justify-center gap-2 ${
+                                            submitStatus.state === 'success'
+                                                ? 'bg-emerald-500 text-black shadow-[0_0_20px_rgba(16,185,129,0.5)]'
+                                                : submitStatus.state === 'submitting'
+                                                    ? 'bg-cyan-600 text-black opacity-80 cursor-wait'
+                                                    : 'bg-cyan-500 text-black hover:bg-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.4)]'
+                                        }`}
+                                        style={{ clipPath: 'polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px)' }}
+                                    >
+                                        {submitStatus.state === 'submitting' && <Loader2 size={14} className="animate-spin" />}
+                                        {submitStatus.state === 'success' && <CheckCircle2 size={14} />}
+                                        {submitStatus.state === 'submitting'
+                                            ? 'Saving...'
+                                            : submitStatus.state === 'success'
+                                                ? 'Confirmed!'
+                                                : newEventData.id ? 'Save Changes' : 'Create Event'}
+                                    </button>
+                                </div>
+                            )}
                         </form>
                     </div>
                 </div>
@@ -793,6 +1177,7 @@ export function CalendarView({ profiles = [], isScreensaver = false }) {
                 onClose={() => setIsSubModalOpen(false)}
                 subscriptions={subscriptions}
                 addSubscription={addSubscription}
+                updateSubscription={updateSubscription}
                 removeSubscription={removeSubscription}
                 profiles={profiles}
             />

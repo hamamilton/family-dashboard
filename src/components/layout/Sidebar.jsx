@@ -120,6 +120,7 @@ export function Sidebar({
           
           <li className="my-3 border-t sidebar-border mx-1" />
 
+
           <li>
             <button
               onClick={onAdminClick}

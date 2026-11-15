@@ -11,9 +11,9 @@ import { AdminPanel } from './components/features/AdminPanel';
 import { GospelStudy } from './components/features/GospelStudy';
 import { LocalEvents } from './components/features/LocalEvents';
 import { LittleVillageEvents } from './components/features/LittleVillageEvents';
-import { RefreshCw } from 'lucide-react';
-import { useInactivity } from './hooks/useInactivity';
-import { Screensaver } from './components/layout/Screensaver';
+import { AmbientDisplay } from './components/features/AmbientDisplay';
+import { CombinedBoard } from './components/views/CombinedBoard';
+import { RefreshCw, ClipboardList, CalendarDays } from 'lucide-react';
 
 function App() {
   const [groupBy, setGroupBy] = useState('day_due');
@@ -72,27 +72,12 @@ function App() {
   const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
 
   const { sortedGroupEntries, loading, toggleChore, skipChore, rotateAssignee, chores, profiles, todayHoliday, birthdayProfiles, fetchError } = useChores(groupBy);
-  const { isIdle, setIsIdle } = useInactivity();
 
   const children = profiles.filter(p => !p.is_parent);
   const allChildrenMetGoal = children.length > 0 && children.every(c => (c.xp_balance || 0) >= 100);
 
   return (
     <div className={`h-screen w-screen overflow-hidden flex flex-col app-root ${allChildrenMetGoal ? 'bonus-glow' : ''}`}>
-      {isIdle && (
-        <Screensaver 
-          onWake={() => setIsIdle(false)} 
-          childrenProfiles={children} 
-          profiles={profiles}
-          sortedGroupEntries={sortedGroupEntries}
-          groupBy={groupBy}
-          toggleChore={toggleChore}
-          skipChore={skipChore}
-          rotateAssignee={rotateAssignee}
-          birthdayProfiles={birthdayProfiles}
-        />
-      )}
-
       {/* Top Header Bar */}
       <Header
         isDarkMode={isDarkMode}
@@ -100,7 +85,6 @@ function App() {
         profiles={profiles}
         isMobileMenuOpen={isMobileMenuOpen}
         setIsMobileMenuOpen={setIsMobileMenuOpen}
-        onStartScreensaver={() => setIsIdle(true)}
       />
 
       <AdminPanel isOpen={adminOpen} onClose={() => setAdminOpen(false)} />
@@ -124,10 +108,10 @@ function App() {
         </div>
       )}
 
-      {/* Main Layout: Sidebar + Content */}
-      <div className="flex flex-1 min-h-0">
+      {/* Main Layout: Sidebar + Split Content */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
         <Sidebar
-          activeTab={activeTab}
+          activeTab={activeTab === 'combined' ? 'mission' : activeTab}
           setActiveTab={setActiveTab}
           appTheme={appTheme}
           setAppTheme={setAppTheme}
@@ -140,102 +124,171 @@ function App() {
           setIsMobileMenuOpen={setIsMobileMenuOpen}
         />
 
-        {/* Page Content */}
-        <main className="flex-1 min-w-0 overflow-y-auto custom-scrollbar page-bg flex flex-col">
-          {loading ? (
-            <div className="flex flex-col items-center justify-center h-full gap-4">
-              <RefreshCw className="animate-spin text-blue-500" size={48} />
-              <p className="text-slate-500 font-black uppercase tracking-widest animate-pulse text-sm">Syncing Database...</p>
-            </div>
-          ) : (
-            <>
-              {/* MISSION PANEL */}
-              {activeTab === 'mission' && (
-                <div className="p-6 flex flex-col gap-6">
-                  <div className="page-card">
-                    <ChoreGrid
-                      sortedGroupEntries={sortedGroupEntries}
-                      profiles={profiles}
-                      groupBy={groupBy}
-                      toggleChore={toggleChore}
-                      skipChore={skipChore}
-                      rotateAssignee={rotateAssignee}
-                      birthdayProfiles={birthdayProfiles}
-                    />
-                  </div>
+        {/* 50/50 Split View: Left = Chores/Schedule/Dashboard, Right = Ambient Photos & Dad Jokes */}
+        <div className="flex-1 min-w-0 flex flex-col lg:flex-row h-full overflow-hidden">
+          
+          {/* Left Side: Chores / Scheduled / Functional Views */}
+          <main className="w-full lg:w-1/2 min-w-0 h-full overflow-y-auto custom-scrollbar page-bg flex flex-col lg:border-r border-slate-700/50">
+            {/* Quick Chores / Schedule Switcher Bar (Visible for daily activity views) */}
+            {(activeTab === 'mission' || activeTab === 'schedule' || activeTab === 'combined') && (
+              <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-slate-700/40 bg-slate-900/40 backdrop-blur-sm sticky top-0 z-10 flex-none font-mono">
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">
+                  View:
                 </div>
-              )}
-
-              {/* MASTER SCHEDULE */}
-              {activeTab === 'schedule' && (
-                <div className="p-6 flex-1 flex flex-col">
-                  <div className="page-card flex-1 min-h-[600px] flex flex-col">
-                    <CalendarView profiles={profiles} />
-                  </div>
+                <div className="flex bg-slate-800/80 p-0.5 rounded border border-slate-700/60 text-xs">
+                  <button
+                    onClick={() => setActiveTab('mission')}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded transition-all font-bold ${
+                      activeTab === 'mission'
+                        ? 'bg-cyan-500 text-black shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <ClipboardList size={13} />
+                    <span>Chores</span>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('schedule')}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded transition-all font-bold ${
+                      activeTab === 'schedule'
+                        ? 'bg-cyan-500 text-black shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <CalendarDays size={13} />
+                    <span>Schedule</span>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('combined')}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded transition-all font-bold ${
+                      activeTab === 'combined'
+                        ? 'bg-cyan-500 text-black shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <span>Combined</span>
+                  </button>
                 </div>
-              )}
-
-              {/* FOOD */}
-              {activeTab === 'food' && (
-                <div className="p-6 flex flex-col gap-6">
-                  <div className="page-card">
-                    <MealPlanner />
-                  </div>
-                </div>
-              )}
-
-              {/* SHOPPING */}
-              {activeTab === 'shopping' && (
-                <div className="p-6 flex flex-col gap-6">
-                  <div className="page-card">
-                    <GroceryList />
-                  </div>
-                </div>
-              )}
-
-              {/* COME, FOLLOW ME */}
-              {activeTab === 'gospel' && (
-                <div className="p-6 flex flex-col gap-6">
-                  <div className="page-card">
-                    <GospelStudy />
-                  </div>
-                </div>
-              )}
-
-              {/* FUN STUFF */}
-              {activeTab === 'fun' && (
-                <div className="p-6 flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  <div className="page-card min-h-[600px] flex flex-col lg:col-span-1">
-                    <LocalEvents />
-                  </div>
-                  <div className="page-card min-h-[600px] flex flex-col lg:col-span-2">
-                    <LittleVillageEvents />
-                  </div>
-                </div>
-              )}
-
-              {/* MEMORY BANK */}
-              {activeTab === 'memories' && (
-                <div className="p-6 flex-1 flex flex-col">
-                  <div className="page-card flex-1 min-h-[600px] flex flex-col">
-                    <PhotoAlbum />
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-
-          {/* Footer */}
-          {!loading && (
-            <footer className="px-6 py-3 border-t border-slate-800/50 flex justify-between items-center text-slate-600 font-bold uppercase text-[10px] tracking-[0.3em]">
-              <div>FamilyHub v2.0 // {appTheme.toUpperCase()} MODE</div>
-              <div className="flex gap-6">
-                <span>Done: {chores.filter(c => c.is_completed).length}</span>
-                <span>Pending: {chores.filter(c => !c.is_completed).length}</span>
               </div>
-            </footer>
-          )}
-        </main>
+            )}
+
+            {loading ? (
+              <div className="flex flex-col items-center justify-center h-full gap-4 py-20">
+                <RefreshCw className="animate-spin text-blue-500" size={48} />
+                <p className="text-slate-500 font-black uppercase tracking-widest animate-pulse text-sm">Syncing Database...</p>
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col">
+                {/* MISSION PANEL */}
+                {activeTab === 'mission' && (
+                  <div className="p-4 md:p-6 flex flex-col gap-6 flex-1">
+                    <div className="page-card flex-1">
+                      <ChoreGrid
+                        sortedGroupEntries={sortedGroupEntries}
+                        profiles={profiles}
+                        groupBy={groupBy}
+                        toggleChore={toggleChore}
+                        skipChore={skipChore}
+                        rotateAssignee={rotateAssignee}
+                        birthdayProfiles={birthdayProfiles}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* MASTER SCHEDULE */}
+                {activeTab === 'schedule' && (
+                  <div className="p-4 md:p-6 flex-1 flex flex-col">
+                    <div className="page-card flex-1 min-h-[600px] flex flex-col">
+                      <CalendarView profiles={profiles} />
+                    </div>
+                  </div>
+                )}
+
+                {/* COMBINED CHORES & SCHEDULE */}
+                {activeTab === 'combined' && (
+                  <div className="p-4 md:p-6 flex-1 flex flex-col">
+                    <div className="page-card flex-1 min-h-[600px] flex flex-col">
+                      <CombinedBoard
+                        sortedGroupEntries={sortedGroupEntries}
+                        profiles={profiles}
+                        toggleChore={toggleChore}
+                        skipChore={skipChore}
+                        rotateAssignee={rotateAssignee}
+                        birthdayProfiles={birthdayProfiles}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* FOOD */}
+                {activeTab === 'food' && (
+                  <div className="p-4 md:p-6 flex flex-col gap-6 flex-1">
+                    <div className="page-card">
+                      <MealPlanner profiles={profiles} />
+                    </div>
+                  </div>
+                )}
+
+                {/* SHOPPING */}
+                {activeTab === 'shopping' && (
+                  <div className="p-4 md:p-6 flex flex-col gap-6 flex-1">
+                    <div className="page-card">
+                      <GroceryList />
+                    </div>
+                  </div>
+                )}
+
+                {/* COME, FOLLOW ME */}
+                {activeTab === 'gospel' && (
+                  <div className="p-4 md:p-6 flex flex-col gap-6 flex-1">
+                    <div className="page-card">
+                      <GospelStudy />
+                    </div>
+                  </div>
+                )}
+
+                {/* FUN STUFF */}
+                {activeTab === 'fun' && (
+                  <div className="p-4 md:p-6 flex-1 flex flex-col gap-6">
+                    <div className="page-card min-h-[400px] flex flex-col">
+                      <LocalEvents />
+                    </div>
+                    <div className="page-card min-h-[400px] flex flex-col">
+                      <LittleVillageEvents />
+                    </div>
+                  </div>
+                )}
+
+                {/* MEMORY BANK */}
+                {activeTab === 'memories' && (
+                  <div className="p-4 md:p-6 flex-1 flex flex-col">
+                    <div className="page-card flex-1 min-h-[600px] flex flex-col">
+                      <PhotoAlbum />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Footer */}
+            {!loading && (
+              <footer className="px-4 md:px-6 py-3 border-t border-slate-800/50 flex justify-between items-center text-slate-600 font-bold uppercase text-[10px] tracking-[0.3em] flex-none">
+                <div>FamilyHub // {appTheme.toUpperCase()} MODE</div>
+                <div className="flex gap-4 sm:gap-6">
+                  <span>Done: {chores.filter(c => c.is_completed).length}</span>
+                  <span>Pending: {chores.filter(c => !c.is_completed).length}</span>
+                </div>
+              </footer>
+            )}
+          </main>
+
+          {/* Right Side: Ambient Photos & Dad Jokes Stream (Visible on Desktop / Wall Display Only) */}
+          <aside className="hidden lg:flex lg:w-1/2 min-w-0 h-full overflow-hidden flex-col bg-slate-950">
+            <AmbientDisplay profiles={profiles} />
+          </aside>
+
+        </div>
       </div>
     </div>
   );

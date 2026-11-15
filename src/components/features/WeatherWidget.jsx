@@ -1,48 +1,8 @@
-import { useState, useEffect } from 'react';
-import { Sun, Cloud, CloudRain, Wind, CloudSun, CloudSnow, CloudLightning, CloudDrizzle, CloudFog } from 'lucide-react';
-
-// WMO Weather interpretation codes
-function getWeatherDetails(code) {
-    if (code === 0) return { label: 'Clear Skies', icon: Sun, color: 'text-amber-400' };
-    if (code === 1 || code === 2) return { label: 'Partly Cloudy', icon: CloudSun, color: 'text-amber-300' };
-    if (code === 3) return { label: 'Overcast', icon: Cloud, color: 'text-slate-400' };
-    if (code === 45 || code === 48) return { label: 'Foggy', icon: CloudFog, color: 'text-slate-300' };
-    if ([51, 53, 55, 56, 57].includes(code)) return { label: 'Drizzle', icon: CloudDrizzle, color: 'text-cyan-400' };
-    if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return { label: 'Rain', icon: CloudRain, color: 'text-blue-400' };
-    if ([71, 73, 75, 77, 85, 86].includes(code)) return { label: 'Snow', icon: CloudSnow, color: 'text-white' };
-    if ([95, 96, 99].includes(code)) return { label: 'Thunderstorm', icon: CloudLightning, color: 'text-purple-400' };
-    return { label: 'Unknown', icon: Cloud, color: 'text-slate-400' };
-}
+import { Wind, Cloud, Sun } from 'lucide-react';
+import { useWeather, getWeatherDetails } from '../../hooks/useWeather';
 
 export function WeatherWidget({ compact = false }) {
-    const [weatherData, setWeatherData] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-
-    const lat = 40.71;
-    const lon = -74.00;
-
-    useEffect(() => {
-        async function fetchWeather() {
-            try {
-                const response = await fetch(
-                    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto`
-                );
-                if (!response.ok) throw new Error('Failed to fetch weather');
-                const data = await response.json();
-                setWeatherData(data);
-                setLoading(false);
-            } catch (err) {
-                console.error(err);
-                setError(err.message);
-                setLoading(false);
-            }
-        }
-
-        fetchWeather();
-        const interval = setInterval(fetchWeather, 30 * 60 * 1000);
-        return () => clearInterval(interval);
-    }, [lat, lon]);
+    const { weatherData, loading, error } = useWeather();
 
     if (loading) {
         return compact ? (

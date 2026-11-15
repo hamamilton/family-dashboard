@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Plus, Trash2, Edit2, Save, LogOut, ChevronDown, ChevronUp, Loader2, Shield, FastForward } from 'lucide-react';
+import { X, Plus, Trash2, Edit2, Save, LogOut, ChevronDown, ChevronUp, Loader2, Shield, FastForward, Cake, Check } from 'lucide-react';
 import { useAdmin } from '../../hooks/useAdmin';
 
 const PB_URL = 'https://hamilton-family-db.fly.dev';
@@ -15,7 +15,7 @@ const EMPTY_CHORE = {
     xp_reward: 10,
     round_robin_pool: [],
     is_completed: false,
-    rotation_period: 7,
+    rotation_period: 3,
 };
 
 function LoginForm({ onLogin, loading, error }) {
@@ -181,10 +181,10 @@ function ChoreForm({ chore, profiles, onSave, onCancel, saving }) {
             {/* Rotation Period */}
             <div>
                 <label className="block text-[10px] font-bold uppercase tracking-widest text-cyan-600 mb-1">Rotation Period (Days)</label>
-                <input type="number" min="1" value={form.rotation_period || 7}
+                <input type="number" min="1" value={form.rotation_period || 3}
                     onChange={e => setForm(f => ({ ...f, rotation_period: parseInt(e.target.value) || 1 }))}
                     className="w-full bg-black border border-slate-700 focus:border-cyan-400 p-2.5 text-white outline-none" />
-                <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-widest">How long a task remains assigned to a profile before rotating</p>
+                <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-widest">How long a task remains assigned to a profile before rotating (default: 3 days)</p>
             </div>
 
             {/* Due Dates (weekly/monthly/one-off) */}
@@ -252,9 +252,45 @@ function ChoreForm({ chore, profiles, onSave, onCancel, saving }) {
     );
 }
 
+function normalizeBirthdayForInput(birthdayStr) {
+    if (!birthdayStr || typeof birthdayStr !== 'string') return '';
+    const clean = birthdayStr.trim().split('T')[0].split(' ')[0];
+    const parts = clean.split('-');
+    if (parts.length === 3) {
+        return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+    }
+    if (parts.length === 2) {
+        const year = new Date().getFullYear();
+        return `${year}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
+    }
+    return '';
+}
+
+function formatBirthdayDisplay(birthdayStr) {
+    if (!birthdayStr || typeof birthdayStr !== 'string') return null;
+    const clean = birthdayStr.trim().split('T')[0].split(' ')[0];
+    const parts = clean.split('-').map(Number);
+    if (parts.length === 3 && parts[1] && parts[2]) {
+        const d = new Date(parts[0], parts[1] - 1, parts[2]);
+        if (!isNaN(d.getTime())) {
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+    }
+    if (parts.length === 2 && parts[0] && parts[1]) {
+        const d = new Date(2000, parts[0] - 1, parts[1]);
+        if (!isNaN(d.getTime())) {
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+    }
+    return birthdayStr;
+}
+
 function ProfileManager({ profiles, adminRequest, onRefresh }) {
     const [xpValues, setXpValues] = useState({});
+    const [birthdayValues, setBirthdayValues] = useState({});
     const [savingId, setSavingId] = useState(null);
+    const [savingBdayId, setSavingBdayId] = useState(null);
+    const [savedBdayId, setSavedBdayId] = useState(null);
 
     const handleAdjust = async (profile, isAdd) => {
         const val = parseInt(xpValues[profile.id] || 0, 10);
@@ -267,45 +303,146 @@ function ProfileManager({ profiles, adminRequest, onRefresh }) {
                 is_op: Math.max(0, newBalance) >= 100
             });
             onRefresh();
+            window.dispatchEvent(new Event('profiles-updated'));
             setXpValues(prev => ({ ...prev, [profile.id]: '' }));
         } finally {
             setSavingId(null);
         }
     };
 
+    const handleSaveBirthday = async (profile, overrideVal) => {
+        const currentInput = overrideVal !== undefined
+            ? overrideVal
+            : (birthdayValues[profile.id] !== undefined ? birthdayValues[profile.id] : normalizeBirthdayForInput(profile.birthday));
+        setSavingBdayId(profile.id);
+        try {
+            await adminRequest(`/api/collections/profiles/records/${profile.id}`, 'PATCH', {
+                birthday: currentInput || ''
+            });
+            if (overrideVal !== undefined) {
+                setBirthdayValues(prev => ({ ...prev, [profile.id]: overrideVal }));
+            }
+            await onRefresh();
+            window.dispatchEvent(new Event('profiles-updated'));
+            setSavedBdayId(profile.id);
+            setTimeout(() => {
+                setSavedBdayId(prev => (prev === profile.id ? null : prev));
+            }, 2000);
+        } finally {
+            setSavingBdayId(null);
+        }
+    };
+
     return (
         <div className="p-6 flex flex-col gap-4">
-            <h3 className="text-sm font-black uppercase tracking-widest text-cyan-400 mb-2">Adjust Profile XP</h3>
-            {profiles.map(p => (
-                <div key={p.id} className="border border-slate-800 p-4 transition-colors flex flex-col gap-3">
-                    <div className="flex justify-between items-center">
-                        <p className="font-black uppercase tracking-wider text-white text-sm">{p.name}</p>
-                        <p className="text-xs font-bold text-fuchsia-400 tracking-widest">{p.xp_balance} XP</p>
+            <div>
+                <h3 className="text-sm font-black uppercase tracking-widest text-cyan-400 mb-1">Manage Profiles</h3>
+                <p className="text-xs text-slate-400">Manage family member profiles, birthdays (auto-synced to calendar), and XP balances.</p>
+            </div>
+            {profiles.map(p => {
+                const storedNormalized = normalizeBirthdayForInput(p.birthday);
+                const currentBirthdayInput = birthdayValues[p.id] !== undefined ? birthdayValues[p.id] : storedNormalized;
+                const isBirthdayDirty = currentBirthdayInput !== storedNormalized;
+                const formattedBday = formatBirthdayDisplay(p.birthday);
+
+                return (
+                    <div key={p.id} className="border border-slate-800 bg-slate-900/40 p-4 transition-colors flex flex-col gap-3">
+                        <div className="flex justify-between items-center gap-2 flex-wrap">
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <p className="font-black uppercase tracking-wider text-white text-sm">{p.name}</p>
+                                {p.is_parent && (
+                                    <span className="text-[10px] uppercase font-bold tracking-widest px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                                        Parent
+                                    </span>
+                                )}
+                                {p.is_op && (
+                                    <span className="text-[10px] uppercase font-bold tracking-widest px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                        OP
+                                    </span>
+                                )}
+                                {formattedBday && (
+                                    <span className="text-[10px] uppercase font-bold tracking-widest px-1.5 py-0.5 rounded bg-pink-500/20 text-pink-300 border border-pink-500/30 flex items-center gap-1">
+                                        🎂 {formattedBday}
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-xs font-bold text-fuchsia-400 tracking-widest">{p.xp_balance} XP</p>
+                        </div>
+
+                        {/* Birthday Field */}
+                        <div className="flex flex-col gap-1.5 pt-1 border-t border-slate-800/70">
+                            <div className="flex items-center justify-between">
+                                <label className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-pink-400">
+                                    <Cake size={12} />
+                                    <span>Birthday (Calendar Sync)</span>
+                                </label>
+                                {savedBdayId === p.id && (
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1">
+                                        <Check size={11} /> Synced to Calendar
+                                    </span>
+                                )}
+                            </div>
+                            <div className="flex gap-2">
+                                <input
+                                    type="date"
+                                    value={currentBirthdayInput}
+                                    onChange={e => setBirthdayValues(prev => ({ ...prev, [p.id]: e.target.value }))}
+                                    className="flex-1 bg-black border border-slate-700 focus:border-pink-400 px-3 py-1.5 text-white text-xs outline-none transition-colors"
+                                />
+                                <button
+                                    type="button"
+                                    disabled={savingBdayId === p.id || !isBirthdayDirty}
+                                    onClick={() => handleSaveBirthday(p)}
+                                    className="bg-pink-500/20 hover:bg-pink-500/40 text-pink-300 border border-pink-500/50 font-black uppercase tracking-widest px-3 py-1.5 text-xs transition-colors disabled:opacity-40 flex items-center gap-1.5"
+                                >
+                                    {savingBdayId === p.id ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                                    Save
+                                </button>
+                                {p.birthday && (
+                                    <button
+                                        type="button"
+                                        disabled={savingBdayId === p.id}
+                                        onClick={() => handleSaveBirthday(p, '')}
+                                        title="Clear birthday"
+                                        className="border border-slate-700 hover:border-rose-500/50 text-slate-400 hover:text-rose-400 px-2.5 py-1.5 text-xs transition-colors disabled:opacity-40"
+                                    >
+                                        <X size={12} />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* XP Adjustment */}
+                        <div className="flex flex-col gap-1.5 pt-1 border-t border-slate-800/70">
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-cyan-600">
+                                XP Balance Adjustment
+                            </label>
+                            <div className="flex gap-2">
+                                <input 
+                                    type="number" 
+                                    min="1"
+                                    placeholder="XP Amount..."
+                                    value={xpValues[p.id] !== undefined ? xpValues[p.id] : ''}
+                                    onChange={e => setXpValues(prev => ({ ...prev, [p.id]: e.target.value }))}
+                                    className="w-24 bg-black border border-slate-700 focus:border-cyan-400 px-3 py-2 text-white text-xs outline-none transition-colors"
+                                />
+                                <button 
+                                    disabled={savingId === p.id || !xpValues[p.id]}
+                                    onClick={() => handleAdjust(p, false)}
+                                    className="bg-rose-500/20 hover:bg-rose-500/40 text-rose-400 border border-rose-500/50 font-black uppercase tracking-widest px-4 py-2 text-xs transition-colors disabled:opacity-50">
+                                    - Sub
+                                </button>
+                                <button 
+                                    disabled={savingId === p.id || !xpValues[p.id]}
+                                    onClick={() => handleAdjust(p, true)}
+                                    className="flex-1 bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-400 border border-emerald-500/50 font-black uppercase tracking-widest px-4 py-2 text-xs transition-colors disabled:opacity-50">
+                                    + Add
+                                </button>
+                            </div>
+                        </div>
                     </div>
-                    <div className="flex gap-2">
-                        <input 
-                            type="number" 
-                            min="1"
-                            placeholder="Amount..."
-                            value={xpValues[p.id] !== undefined ? xpValues[p.id] : ''}
-                            onChange={e => setXpValues(prev => ({ ...prev, [p.id]: e.target.value }))}
-                            className="w-24 bg-black border border-slate-700 focus:border-cyan-400 px-3 py-2 text-white text-xs outline-none transition-colors"
-                        />
-                        <button 
-                            disabled={savingId === p.id || !xpValues[p.id]}
-                            onClick={() => handleAdjust(p, false)}
-                            className="bg-rose-500/20 hover:bg-rose-500/40 text-rose-400 border border-rose-500/50 font-black uppercase tracking-widest px-4 py-2 text-xs transition-colors disabled:opacity-50">
-                            - Sub
-                        </button>
-                        <button 
-                            disabled={savingId === p.id || !xpValues[p.id]}
-                            onClick={() => handleAdjust(p, true)}
-                            className="flex-1 bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-400 border border-emerald-500/50 font-black uppercase tracking-widest px-4 py-2 text-xs transition-colors disabled:opacity-50">
-                            + Add
-                        </button>
-                    </div>
-                </div>
-            ))}
+                );
+            })}
         </div>
     );
 }
@@ -351,7 +488,7 @@ export function AdminPanel({ isOpen, onClose }) {
                 due_dates: form.due_dates,
                 round_robin_pool: form.round_robin_pool, // array of profile IDs
                 is_completed: form.is_completed || false,
-                rotation_period: form.rotation_period || 7,
+                rotation_period: form.rotation_period || 3,
                 cannot_cover: form.cannot_cover || false,
                 one_off_date: form.one_off_date || "",
             };

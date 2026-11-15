@@ -118,12 +118,50 @@ code {
 .custom-calendar-wrapper .rbc-toolbar button {
   color: inherit;
 }
+.custom-calendar-wrapper .rbc-month-view,
+.custom-calendar-wrapper .rbc-month-row,
+.custom-calendar-wrapper .rbc-month-row + .rbc-month-row,
+.custom-calendar-wrapper .rbc-time-view,
+.custom-calendar-wrapper .rbc-header,
+.custom-calendar-wrapper .rbc-header + .rbc-header,
+.custom-calendar-wrapper .rbc-day-bg,
+.custom-calendar-wrapper .rbc-day-bg + .rbc-day-bg,
+.custom-calendar-wrapper .rbc-time-header-content,
+.custom-calendar-wrapper .rbc-time-header > .rbc-row:first-child,
+.custom-calendar-wrapper .rbc-time-header > .rbc-row.rbc-row-resource,
+.custom-calendar-wrapper .rbc-time-header.rbc-overflowing,
+.custom-calendar-wrapper .rbc-time-view .rbc-allday-cell + .rbc-allday-cell,
+.custom-calendar-wrapper .rbc-time-content,
+.custom-calendar-wrapper .rbc-time-content > * + * > *,
+.custom-calendar-wrapper .rbc-timeslot-group {
+  border-color: rgba(148, 163, 184, 0.22);
+}
+.custom-calendar-wrapper .rbc-time-content {
+  border-top-width: 1px;
+}
+.custom-calendar-wrapper .rbc-day-slot .rbc-time-slot {
+  border-top-color: rgba(148, 163, 184, 0.1);
+}
 .dark .custom-calendar-wrapper .rbc-month-view,
 .dark .custom-calendar-wrapper .rbc-month-row,
+.dark .custom-calendar-wrapper .rbc-month-row + .rbc-month-row,
 .dark .custom-calendar-wrapper .rbc-time-view,
 .dark .custom-calendar-wrapper .rbc-header,
-.dark .custom-calendar-wrapper .rbc-day-bg {
-  border-color: #164e63; /* cyan-900 */
+.dark .custom-calendar-wrapper .rbc-header + .rbc-header,
+.dark .custom-calendar-wrapper .rbc-day-bg,
+.dark .custom-calendar-wrapper .rbc-day-bg + .rbc-day-bg,
+.dark .custom-calendar-wrapper .rbc-time-header-content,
+.dark .custom-calendar-wrapper .rbc-time-header > .rbc-row:first-child,
+.dark .custom-calendar-wrapper .rbc-time-header > .rbc-row.rbc-row-resource,
+.dark .custom-calendar-wrapper .rbc-time-header.rbc-overflowing,
+.dark .custom-calendar-wrapper .rbc-time-view .rbc-allday-cell + .rbc-allday-cell,
+.dark .custom-calendar-wrapper .rbc-time-content,
+.dark .custom-calendar-wrapper .rbc-time-content > * + * > *,
+.dark .custom-calendar-wrapper .rbc-timeslot-group {
+  border-color: rgba(148, 163, 184, 0.12);
+}
+.dark .custom-calendar-wrapper .rbc-day-slot .rbc-time-slot {
+  border-top-color: rgba(148, 163, 184, 0.05);
 }
 .dark .custom-calendar-wrapper .rbc-off-range-bg {
   background-color: #0f172a; /* slate-900 */
@@ -465,6 +503,28 @@ body.theme-android .chore-card {
 
 .animate-ken-burns {
   animation: ken-burns 25s ease-out forwards;
+}
+
+@keyframes photo-fall {
+  0% {
+    opacity: 0;
+    transform: translateY(-160px) scale(1.15) rotate(var(--rot-start, -10deg));
+  }
+  65% {
+    opacity: 1;
+    transform: translateY(12px) scale(0.97) rotate(var(--rot-end, 3deg));
+  }
+  85% {
+    transform: translateY(-6px) scale(1.01) rotate(var(--rot-end, 3deg));
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(var(--rot-end, 3deg));
+  }
+}
+
+.animate-photo-fall {
+  animation: photo-fall 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 @keyframes drift-up {
