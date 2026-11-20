@@ -179,7 +179,7 @@ function App() {
                 <p className="text-slate-500 font-black uppercase tracking-widest animate-pulse text-sm">Syncing Database...</p>
               </div>
             ) : (
-              <div className="flex-1 flex flex-col">
+              <div className="flex-1 min-h-0 flex flex-col">
                 {/* MISSION PANEL */}
                 {activeTab === 'mission' && (
                   <div className="p-4 md:p-6 flex flex-col gap-6 flex-1">

@@ -439,13 +439,13 @@ export function DotsAndBoxes({ profiles = [], isDarkMode = true }) {
     if (!canvas || !wrapper) return;
 
     const rect = wrapper.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
     const dpr = window.devicePixelRatio || 1;
-    const style = window.getComputedStyle(wrapper);
-    const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
-    const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
-    const availW = Math.max(220, rect.width - padX);
-    const availH = Math.max(220, rect.height - padY);
-    const size = Math.max(220, Math.min(900, Math.floor(Math.min(availW, availH))));
+    const pad = 20;
+    const availW = Math.max(160, rect.width - pad);
+    const availH = Math.max(160, rect.height - pad);
+    const size = Math.max(160, Math.floor(Math.min(availW, availH)));
 
     canvas.width = size * dpr;
     canvas.height = size * dpr;
@@ -456,7 +456,7 @@ export function DotsAndBoxes({ profiles = [], isDarkMode = true }) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const n = boardRef.current.gridSize;
-    const edgePad = Math.max(20, size * 0.065);
+    const edgePad = Math.max(18, size * 0.065);
     const usable = size - edgePad * 2;
     const cellSize = usable / n;
 
@@ -465,8 +465,8 @@ export function DotsAndBoxes({ profiles = [], isDarkMode = true }) {
       height: size,
       padding: edgePad,
       cellSize,
-      dotRadius: Math.max(4.5, Math.min(11, cellSize * 0.11)),
-      lineThickness: Math.max(5, Math.min(13, cellSize * 0.13))
+      dotRadius: Math.max(4, Math.min(10, cellSize * 0.11)),
+      lineThickness: Math.max(4.5, Math.min(12, cellSize * 0.13))
     };
 
     renderCanvas();
@@ -779,14 +779,14 @@ export function DotsAndBoxes({ profiles = [], isDarkMode = true }) {
 
   return (
     <div
-      className={`flex flex-col items-center justify-between w-full h-full p-3 sm:p-5 select-none gap-3 overflow-hidden ${
+      className={`flex flex-col items-center justify-between w-full h-full min-h-0 p-2 sm:p-3 select-none gap-2 overflow-hidden ${
         isFullViewport
           ? 'fixed inset-0 z-50 bg-slate-950'
           : ''
       }`}
     >
       {/* Top Bar / Controls */}
-      <div className="w-full flex-none flex flex-wrap items-center justify-between gap-2 bg-slate-900/60 dark:bg-slate-900/80 backdrop-blur-md px-3.5 py-2.5 rounded-2xl border border-slate-700/60">
+      <div className="w-full flex-none flex flex-wrap items-center justify-between gap-2 bg-slate-900/60 dark:bg-slate-900/80 backdrop-blur-md px-3 py-2 rounded-2xl border border-slate-700/60">
         <div className="flex items-center gap-2.5">
           <div
             className="w-9 h-9 rounded-xl flex items-center justify-center shadow-sm text-white font-black text-lg"
@@ -875,11 +875,11 @@ export function DotsAndBoxes({ profiles = [], isDarkMode = true }) {
       </div>
 
       {/* Player Cards & Turn Status */}
-      <div className="w-full flex-none grid grid-cols-2 sm:grid-cols-12 gap-2.5 items-center">
+      <div className="w-full flex-none grid grid-cols-2 sm:grid-cols-12 gap-2 items-center">
         {/* Player 1 Card */}
         <div
-          className={`col-span-1 sm:col-span-4 rounded-2xl p-3 border-2 transition-all flex items-center justify-between gap-2 bg-slate-900/70 ${
-            !gameOver && currentPlayer === 1 ? 'scale-[1.02] shadow-lg' : 'border-slate-700/80 opacity-85'
+          className={`col-span-1 sm:col-span-4 rounded-xl px-3 py-2 border-2 transition-all flex items-center justify-between gap-2 bg-slate-900/70 ${
+            !gameOver && currentPlayer === 1 ? 'scale-[1.01] shadow-lg' : 'border-slate-700/80 opacity-85'
           }`}
           style={{
             borderColor: !gameOver && currentPlayer === 1 ? theme.p1.main : undefined,
@@ -962,8 +962,8 @@ export function DotsAndBoxes({ profiles = [], isDarkMode = true }) {
 
         {/* Player 2 Card */}
         <div
-          className={`col-span-1 sm:col-span-4 rounded-2xl p-3 border-2 transition-all flex items-center justify-between gap-2 bg-slate-900/70 ${
-            !gameOver && currentPlayer === 2 ? 'scale-[1.02] shadow-lg' : 'border-slate-700/80 opacity-85'
+          className={`col-span-1 sm:col-span-4 rounded-xl px-3 py-2 border-2 transition-all flex items-center justify-between gap-2 bg-slate-900/70 ${
+            !gameOver && currentPlayer === 2 ? 'scale-[1.01] shadow-lg' : 'border-slate-700/80 opacity-85'
           }`}
           style={{
             borderColor: !gameOver && currentPlayer === 2 ? theme.p2.main : undefined,
@@ -1026,22 +1026,24 @@ export function DotsAndBoxes({ profiles = [], isDarkMode = true }) {
       {/* Canvas Board Container */}
       <div
         ref={wrapperRef}
-        className={`flex-1 min-h-0 w-full rounded-3xl shadow-lg border p-3 sm:p-5 flex items-center justify-center relative overflow-hidden ${
+        className={`flex-1 min-h-0 min-w-0 w-full h-full rounded-2xl shadow-lg border relative overflow-hidden ${
           isDarkMode
             ? 'bg-slate-900/90 border-slate-700/80 shadow-black/40'
             : 'bg-white border-slate-200 shadow-slate-200/70'
         }`}
       >
-        <canvas
-          ref={canvasRef}
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-          onClick={handleClick}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          className="rounded-2xl touch-none cursor-pointer"
-        />
+        <div className="absolute inset-0 flex items-center justify-center p-2">
+          <canvas
+            ref={canvasRef}
+            onMouseMove={handleMouseMove}
+            onMouseLeave={handleMouseLeave}
+            onClick={handleClick}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            className="rounded-xl touch-none cursor-pointer block"
+          />
+        </div>
 
         {/* Floating Combo / Extra Turn Toast */}
         <div
