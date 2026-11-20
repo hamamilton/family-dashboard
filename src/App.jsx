@@ -125,11 +125,11 @@ function App() {
           setIsMobileMenuOpen={setIsMobileMenuOpen}
         />
 
-        {/* 50/50 Split View: Left = Chores/Schedule/Dashboard, Right = Ambient Photos & Dad Jokes */}
+        {/* Split View (or Full-Screen View when Games tab is active) */}
         <div className="flex-1 min-w-0 flex flex-col lg:flex-row h-full overflow-hidden">
           
-          {/* Left Side: Chores / Scheduled / Functional Views */}
-          <main className="w-full lg:w-1/2 min-w-0 h-full overflow-y-auto custom-scrollbar page-bg flex flex-col lg:border-r border-slate-700/50">
+          {/* Left Side: Chores / Scheduled / Functional Views (Full width on Games tab) */}
+          <main className={`w-full ${activeTab === 'games' ? 'lg:w-full overflow-hidden' : 'lg:w-1/2 overflow-y-auto lg:border-r'} min-w-0 h-full custom-scrollbar page-bg flex flex-col border-slate-700/50`}>
             {/* Quick Chores / Schedule Switcher Bar (Visible for daily activity views) */}
             {(activeTab === 'mission' || activeTab === 'schedule' || activeTab === 'combined') && (
               <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-slate-700/40 bg-slate-900/40 backdrop-blur-sm sticky top-0 z-10 flex-none font-mono">
@@ -261,12 +261,10 @@ function App() {
                   </div>
                 )}
 
-                {/* GAMES */}
+                {/* GAMES (Full Screen) */}
                 {activeTab === 'games' && (
-                  <div className="p-4 md:p-6 flex-1 flex flex-col">
-                    <div className="page-card flex-1 min-h-[600px] flex flex-col">
-                      <DotsAndBoxes profiles={profiles} isDarkMode={isDarkMode} />
-                    </div>
+                  <div className="flex-1 min-h-0 w-full h-full flex flex-col overflow-hidden">
+                    <DotsAndBoxes profiles={profiles} isDarkMode={isDarkMode} />
                   </div>
                 )}
 
@@ -282,7 +280,7 @@ function App() {
             )}
 
             {/* Footer */}
-            {!loading && (
+            {!loading && activeTab !== 'games' && (
               <footer className="px-4 md:px-6 py-3 border-t border-slate-800/50 flex justify-between items-center text-slate-600 font-bold uppercase text-[10px] tracking-[0.3em] flex-none">
                 <div>FamilyHub // {appTheme.toUpperCase()} MODE</div>
                 <div className="flex gap-4 sm:gap-6">
@@ -293,10 +291,12 @@ function App() {
             )}
           </main>
 
-          {/* Right Side: Ambient Photos & Dad Jokes Stream (Visible on Desktop / Wall Display Only) */}
-          <aside className="hidden lg:flex lg:w-1/2 min-w-0 h-full overflow-hidden flex-col bg-slate-950">
-            <AmbientDisplay profiles={profiles} />
-          </aside>
+          {/* Right Side: Ambient Photos & Dad Jokes Stream (Hidden on Games tab so Games is full screen) */}
+          {activeTab !== 'games' && (
+            <aside className="hidden lg:flex lg:w-1/2 min-w-0 h-full overflow-hidden flex-col bg-slate-950">
+              <AmbientDisplay profiles={profiles} />
+            </aside>
+          )}
 
         </div>
       </div>

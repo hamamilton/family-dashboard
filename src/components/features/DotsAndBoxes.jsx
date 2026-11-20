@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Volume2, VolumeX, Undo2, RotateCcw, Palette, Users, Trophy } from 'lucide-react';
+import { Volume2, VolumeX, Undo2, RotateCcw, Palette, Users, Trophy, Maximize2, Minimize2 } from 'lucide-react';
 
 const THEMES = [
   {
@@ -174,6 +174,7 @@ export function DotsAndBoxes({ profiles = [], isDarkMode = true }) {
   const [historyCount, setHistoryCount] = useState(0);
   const [gameOver, setGameOver] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [isFullViewport, setIsFullViewport] = useState(false);
   const [toast, setToast] = useState({ visible: false, text: '', player: 1 });
 
   // Default to first two profiles when profiles load
@@ -441,7 +442,10 @@ export function DotsAndBoxes({ profiles = [], isDarkMode = true }) {
     const dpr = window.devicePixelRatio || 1;
     const style = window.getComputedStyle(wrapper);
     const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
-    const size = Math.max(220, Math.min(480, rect.width - padX));
+    const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    const availW = Math.max(220, rect.width - padX);
+    const availH = Math.max(220, rect.height - padY);
+    const size = Math.max(220, Math.min(900, Math.floor(Math.min(availW, availH))));
 
     canvas.width = size * dpr;
     canvas.height = size * dpr;
@@ -461,8 +465,8 @@ export function DotsAndBoxes({ profiles = [], isDarkMode = true }) {
       height: size,
       padding: edgePad,
       cellSize,
-      dotRadius: Math.max(4.5, Math.min(8.5, cellSize * 0.11)),
-      lineThickness: Math.max(5, Math.min(10, cellSize * 0.13))
+      dotRadius: Math.max(4.5, Math.min(11, cellSize * 0.11)),
+      lineThickness: Math.max(5, Math.min(13, cellSize * 0.13))
     };
 
     renderCanvas();
@@ -503,8 +507,16 @@ export function DotsAndBoxes({ profiles = [], isDarkMode = true }) {
 
   useEffect(() => {
     window.addEventListener('resize', resizeCanvas);
-    return () => window.removeEventListener('resize', resizeCanvas);
-  }, [resizeCanvas]);
+    let observer;
+    if (wrapperRef.current && typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(() => resizeCanvas());
+      observer.observe(wrapperRef.current);
+    }
+    return () => {
+      window.removeEventListener('resize', resizeCanvas);
+      if (observer) observer.disconnect();
+    };
+  }, [resizeCanvas, isFullViewport]);
 
   useEffect(() => {
     renderCanvas();
@@ -766,9 +778,15 @@ export function DotsAndBoxes({ profiles = [], isDarkMode = true }) {
   const remainingBoxes = totalBoxes - (scores[1] + scores[2]);
 
   return (
-    <div className="flex flex-col items-center justify-between w-full h-full p-2 sm:p-4 select-none gap-4">
+    <div
+      className={`flex flex-col items-center justify-between w-full h-full p-3 sm:p-5 select-none gap-3 overflow-hidden ${
+        isFullViewport
+          ? 'fixed inset-0 z-50 bg-slate-950'
+          : ''
+      }`}
+    >
       {/* Top Bar / Controls */}
-      <div className="w-full flex flex-wrap items-center justify-between gap-2 bg-slate-900/60 dark:bg-slate-900/80 backdrop-blur-md px-3.5 py-2.5 rounded-2xl border border-slate-700/60">
+      <div className="w-full flex-none flex flex-wrap items-center justify-between gap-2 bg-slate-900/60 dark:bg-slate-900/80 backdrop-blur-md px-3.5 py-2.5 rounded-2xl border border-slate-700/60">
         <div className="flex items-center gap-2.5">
           <div
             className="w-9 h-9 rounded-xl flex items-center justify-center shadow-sm text-white font-black text-lg"
@@ -844,11 +862,20 @@ export function DotsAndBoxes({ profiles = [], isDarkMode = true }) {
             <RotateCcw size={14} />
             <span>New</span>
           </button>
+
+          {/* Full Viewport Toggle */}
+          <button
+            onClick={() => setIsFullViewport(prev => !prev)}
+            title={isFullViewport ? 'Exit Full Screen Overlay' : 'Expand Over Entire Screen'}
+            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors border border-slate-700 flex items-center gap-1 text-xs font-bold"
+          >
+            {isFullViewport ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+          </button>
         </div>
       </div>
 
       {/* Player Cards & Turn Status */}
-      <div className="w-full grid grid-cols-2 sm:grid-cols-12 gap-2.5 items-center">
+      <div className="w-full flex-none grid grid-cols-2 sm:grid-cols-12 gap-2.5 items-center">
         {/* Player 1 Card */}
         <div
           className={`col-span-1 sm:col-span-4 rounded-2xl p-3 border-2 transition-all flex items-center justify-between gap-2 bg-slate-900/70 ${
@@ -999,7 +1026,7 @@ export function DotsAndBoxes({ profiles = [], isDarkMode = true }) {
       {/* Canvas Board Container */}
       <div
         ref={wrapperRef}
-        className={`w-full max-w-[480px] aspect-square rounded-3xl shadow-lg border p-3 sm:p-5 flex items-center justify-center relative ${
+        className={`flex-1 min-h-0 w-full rounded-3xl shadow-lg border p-3 sm:p-5 flex items-center justify-center relative overflow-hidden ${
           isDarkMode
             ? 'bg-slate-900/90 border-slate-700/80 shadow-black/40'
             : 'bg-white border-slate-200 shadow-slate-200/70'
@@ -1029,7 +1056,7 @@ export function DotsAndBoxes({ profiles = [], isDarkMode = true }) {
         </div>
       </div>
 
-      <p className="text-center text-[11px] text-slate-400 font-medium">
+      <p className="flex-none text-center text-[11px] text-slate-400 font-medium">
         Tap or click any dashed line between two dots to claim it. Complete the 4th side of a box to score & go again!
       </p>
 
