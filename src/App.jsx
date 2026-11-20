@@ -13,8 +13,9 @@ import { LocalEvents } from './components/features/LocalEvents';
 import { LittleVillageEvents } from './components/features/LittleVillageEvents';
 import { AmbientDisplay } from './components/features/AmbientDisplay';
 import { DotsAndBoxes } from './components/features/DotsAndBoxes';
+import { BreathingOrb, ZenRippleBubbles } from './components/features/MindfulnessGames';
 import { CombinedBoard } from './components/views/CombinedBoard';
-import { RefreshCw, ClipboardList, CalendarDays } from 'lucide-react';
+import { RefreshCw, ClipboardList, CalendarDays, Grid, Wind, Waves } from 'lucide-react';
 
 function App() {
   const [groupBy, setGroupBy] = useState('day_due');
@@ -28,6 +29,7 @@ function App() {
   });
 
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('activeTab') || 'mission');
+  const [activeGame, setActiveGame] = useState(() => localStorage.getItem('activeGame') || 'dots');
   const [appTheme, setAppTheme] = useState(() => localStorage.getItem('appTheme') || 'scifi');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === 'true');
   const [adminOpen, setAdminOpen] = useState(false);
@@ -53,8 +55,9 @@ function App() {
     localStorage.setItem('appTheme', appTheme);
   }, [appTheme]);
 
-  // Persist active tab and sidebar state
+  // Persist active tab, active game, and sidebar state
   useEffect(() => { localStorage.setItem('activeTab', activeTab); }, [activeTab]);
+  useEffect(() => { localStorage.setItem('activeGame', activeGame); }, [activeGame]);
   useEffect(() => { localStorage.setItem('sidebarCollapsed', sidebarCollapsed); }, [sidebarCollapsed]);
 
   // Refresh app at midnight
@@ -261,10 +264,63 @@ function App() {
                   </div>
                 )}
 
-                {/* GAMES (Full Screen) */}
+                {/* GAMES & CALM CORNER (Full Screen) */}
                 {activeTab === 'games' && (
                   <div className="flex-1 min-h-0 w-full h-full flex flex-col overflow-hidden">
-                    <DotsAndBoxes profiles={profiles} isDarkMode={isDarkMode} />
+                    {/* Game & Calm Mode Switcher Bar */}
+                    <div className="flex-none flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b border-slate-800 bg-slate-950/70 backdrop-blur-sm">
+                      <div className="flex items-center gap-1.5 text-[11px] font-black text-slate-400 uppercase tracking-widest">
+                        <span>Games & Calm Corner:</span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800">
+                        <button
+                          onClick={() => setActiveGame('dots')}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            activeGame === 'dots'
+                              ? 'bg-cyan-500 text-black shadow-sm'
+                              : 'text-slate-300 hover:text-white'
+                          }`}
+                        >
+                          <Grid size={14} />
+                          <span>Dots & Boxes</span>
+                        </button>
+                        <button
+                          onClick={() => setActiveGame('breathing')}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            activeGame === 'breathing'
+                              ? 'bg-emerald-400 text-black shadow-sm'
+                              : 'text-slate-300 hover:text-white'
+                          }`}
+                        >
+                          <Wind size={14} />
+                          <span>Breathing Orb</span>
+                        </button>
+                        <button
+                          onClick={() => setActiveGame('zen')}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            activeGame === 'zen'
+                              ? 'bg-violet-400 text-black shadow-sm'
+                              : 'text-slate-300 hover:text-white'
+                          }`}
+                        >
+                          <Waves size={14} />
+                          <span>Zen Ripples & Bubbles</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Active Game / Mindfulness View */}
+                    <div className="flex-1 min-h-0 w-full h-full flex flex-col overflow-hidden">
+                      {activeGame === 'dots' && (
+                        <DotsAndBoxes profiles={profiles} isDarkMode={isDarkMode} />
+                      )}
+                      {activeGame === 'breathing' && (
+                        <BreathingOrb isDarkMode={isDarkMode} />
+                      )}
+                      {activeGame === 'zen' && (
+                        <ZenRippleBubbles isDarkMode={isDarkMode} />
+                      )}
+                    </div>
                   </div>
                 )}
 
