@@ -39,7 +39,10 @@ import {
   X,
   BookOpen,
   GraduationCap,
-  Shield
+  Shield,
+  Timer,
+  Pause,
+  Play
 } from 'lucide-react';
 
 const BOARD_THEMES = [
@@ -135,6 +138,30 @@ const SKILL_LEVELS = [
   { level: 15, depth: 12, name: 'Level 4: Club Master', elo: '~2000', desc: 'Deep positional foresight' },
   { level: 20, depth: 16, name: 'Level 5: Grandmaster', elo: '~3000+', desc: 'Full Stockfish power' }
 ];
+
+const TIME_CONTROLS = [
+  { id: 'untimed', name: '∞ Untimed', short: '∞', seconds: 0, increment: 0 },
+  { id: 'bullet1', name: '⚡ 1 min (Bullet)', short: '1+0', seconds: 60, increment: 0 },
+  { id: 'bullet2_1', name: '⚡ 2 | 1 (Bullet)', short: '2+1', seconds: 120, increment: 1 },
+  { id: 'blitz3', name: '🔥 3 min (Blitz)', short: '3+0', seconds: 180, increment: 0 },
+  { id: 'blitz3_2', name: '🔥 3 | 2 (Blitz)', short: '3+2', seconds: 180, increment: 2 },
+  { id: 'blitz5', name: '🔥 5 min (Blitz)', short: '5+0', seconds: 300, increment: 0 },
+  { id: 'rapid10', name: '⏱️ 10 min (Rapid)', short: '10+0', seconds: 600, increment: 0 },
+  { id: 'rapid15_10', name: '⏱️ 15 | 10 (Rapid)', short: '15+10', seconds: 900, increment: 10 }
+];
+
+function formatChessClock(sec) {
+  const clamped = Math.max(0, sec);
+  if (clamped < 20 && clamped > 0) {
+    const s = Math.floor(clamped);
+    const tenths = Math.floor((clamped - s) * 10);
+    return `0:${String(s).padStart(2, '0')}.${tenths}`;
+  }
+  const totalSec = Math.ceil(clamped);
+  const mins = Math.floor(totalSec / 60);
+  const remSec = totalSec % 60;
+  return `${mins}:${String(remSec).padStart(2, '0')}`;
+}
 
 // Web Audio synthesizer for chess SFX
 class ChessAudio {
@@ -302,6 +329,20 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
   const [isFullViewport, setIsFullViewport] = useState(false);
   const [muted, setMuted] = useState(false);
 
+  // Chess Clock / Timer state
+  const [timeControlIdx, setTimeControlIdx] = useState(() => {
+    const saved = localStorage.getItem('chessTimeControlIdx');
+    const idx = saved !== null ? Number(saved) : 0;
+    return idx >= 0 && idx < TIME_CONTROLS.length ? idx : 0;
+  });
+  const activeTimeControl = TIME_CONTROLS[timeControlIdx] || TIME_CONTROLS[0];
+  const isTimedGame = activeTimeControl.seconds > 0;
+  const [timeLeft, setTimeLeft] = useState(() => ({
+    w: activeTimeControl.seconds,
+    b: activeTimeControl.seconds
+  }));
+  const [clockPaused, setClockPaused] = useState(false);
+
   // Persist skin selections
   useEffect(() => {
     localStorage.setItem('chessBoardThemeIdx', String(themeIdx));
@@ -314,6 +355,10 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
   useEffect(() => {
     localStorage.setItem('chessCustomColors', JSON.stringify(customColors));
   }, [customColors]);
+
+  useEffect(() => {
+    localStorage.setItem('chessTimeControlIdx', String(timeControlIdx));
+  }, [timeControlIdx]);
 
   // Player selection (Pass & Play & vs Stockfish)
   const [selectedProfiles, setSelectedProfiles] = useState({ 1: '', 2: '' });
@@ -557,6 +602,60 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
     }
   };
 
+  // Apply increment to the player who just completed a move
+  const applyClockIncrement = useCallback((moverColor) => {
+    const tc = TIME_CONTROLS[timeControlIdx] || TIME_CONTROLS[0];
+    if (tc.seconds > 0 && tc.increment > 0) {
+      setTimeLeft(prev => ({
+        ...prev,
+        [moverColor]: prev[moverColor] + tc.increment
+      }));
+    }
+  }, [timeControlIdx]);
+
+  // Chess Clock 100ms countdown interval & flag-fall (timeout) detection
+  useEffect(() => {
+    if (!isTimedGame || gameStatus.over || clockPaused) return;
+    // Start ticking once the first move has been made (or immediately if computer plays White)
+    const shouldTick = history.length > 0 || (gameMode === 'stockfish' && playerColor === 'b');
+    if (!shouldTick) return;
+
+    const interval = setInterval(() => {
+      setTimeLeft(prev => {
+        const currentVal = prev[turn];
+        if (currentVal <= 0.1) {
+          // Flag fall! Time out for current turn player
+          clearInterval(interval);
+          if (stockfishRef.current) {
+            stockfishRef.current.stop();
+          }
+          setIsThinking(false);
+          const winner = turn === 'w' ? 'Black' : 'White';
+          engine.history = [];
+          setHistory([]);
+          setMoveQualities({});
+          setLatestMoveFeedback(null);
+          setGameStatus({
+            over: true,
+            winner,
+            check: false,
+            reason: `Time Out! ${winner} wins on time.`
+          });
+          setShowGameOverModal(true);
+          chessAudio.playVictory();
+          awardWinXP(winner);
+          return { ...prev, [turn]: 0 };
+        }
+        return {
+          ...prev,
+          [turn]: Math.max(0, Number((currentVal - 0.1).toFixed(2)))
+        };
+      });
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [isTimedGame, gameStatus.over, clockPaused, history.length, turn, gameMode, playerColor, engine]);
+
   // Trigger Stockfish move (or guided Book Move when practicing an Opening/Defense lesson!)
   const triggerStockfishMove = useCallback(() => {
     if (engine.isGameOver()) return;
@@ -579,8 +678,10 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
         if (bookMoveObj) {
           setTimeout(() => {
             setIsThinking(false);
+            const mover = engine.turn;
             const record = engine.playMove(bookMoveObj);
             if (record) {
+              applyClockIncrement(mover);
               if (record.captured || record.isEnPassant) {
                 chessAudio.playCapture();
               } else if (record.isCastle) {
@@ -604,8 +705,10 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
       setIsThinking(false);
       if (!bestMoveUci) return;
 
+      const mover = engine.turn;
       const record = engine.playMove(bestMoveUci);
       if (record) {
+        applyClockIncrement(mover);
         if (record.captured || record.isEnPassant) {
           chessAudio.playCapture();
         } else if (record.isCastle) {
@@ -706,9 +809,11 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
 
   // Execute a valid move
   const executeMove = (move) => {
+    const mover = engine.turn;
     const record = engine.playMove(move);
     if (!record) return;
 
+    applyClockIncrement(mover);
     if (record.captured || record.isEnPassant) {
       chessAudio.playCapture();
     } else if (record.isCastle) {
@@ -785,18 +890,22 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
   };
 
   // New Game
-  const handleNewGame = (keepLesson = false) => {
+  const handleNewGame = (keepLesson = false, overrideTimeIdx = null) => {
     if (stockfishRef.current) {
       stockfishRef.current.stop();
       stockfishRef.current.startNewGame();
     }
+    const tcIdx = typeof overrideTimeIdx === 'number' ? overrideTimeIdx : timeControlIdx;
+    const tc = TIME_CONTROLS[tcIdx] || TIME_CONTROLS[0];
+    setTimeLeft({ w: tc.seconds, b: tc.seconds });
+    setClockPaused(false);
     engine.load();
     setHistory([]);
     setMoveQualities({});
     setLatestMoveFeedback(null);
     setHoveredBookMove(null);
     lastEvalCpRef.current = 0;
-    if (!keepLesson) {
+    if (keepLesson !== true) {
       setActiveLesson(null);
     }
     setEvalScore({ cp: 0, mate: null });
@@ -820,6 +929,9 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
       stockfishRef.current.stop();
       stockfishRef.current.startNewGame();
     }
+    const tc = TIME_CONTROLS[timeControlIdx] || TIME_CONTROLS[0];
+    setTimeLeft({ w: tc.seconds, b: tc.seconds });
+    setClockPaused(false);
     engine.load();
     setHistory([]);
     setMoveQualities({});
@@ -1012,6 +1124,38 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
               <span>Auto-Flip</span>
             </button>
           )}
+
+          {/* Chess Clock / Timer Selector */}
+          <div className="flex items-center gap-1.5 bg-slate-800/90 px-2.5 py-1 rounded-lg border border-slate-700/60">
+            <Timer size={13} className={isTimedGame ? 'text-amber-400' : 'text-slate-400'} />
+            <select
+              value={timeControlIdx}
+              onChange={(e) => {
+                const nextIdx = Number(e.target.value);
+                setTimeControlIdx(nextIdx);
+                handleNewGame(Boolean(activeLesson), nextIdx);
+              }}
+              className="bg-transparent text-amber-300 font-bold focus:outline-none cursor-pointer text-xs"
+              title="Select Chess Clock / Time Control"
+            >
+              {TIME_CONTROLS.map((tc, idx) => (
+                <option key={tc.id} value={idx} className="bg-slate-900 text-slate-100">
+                  {tc.name}
+                </option>
+              ))}
+            </select>
+            {isTimedGame && !gameStatus.over && history.length > 0 && (
+              <button
+                onClick={() => setClockPaused(p => !p)}
+                className={`ml-1 p-0.5 rounded transition ${
+                  clockPaused ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white'
+                }`}
+                title={clockPaused ? 'Resume Clock' : 'Pause Clock'}
+              >
+                {clockPaused ? <Play size={11} /> : <Pause size={11} />}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Right: Quick actions */}
@@ -1167,11 +1311,33 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
                   </div>
                 </div>
               </div>
-              {turn === (isFlipped ? 'w' : 'b') && (
-                <span className="flex items-center gap-1 text-[9px] sm:text-[10px] font-bold text-cyan-400 uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 animate-pulse shrink-0">
-                  Turn
-                </span>
-              )}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {isTimedGame && (() => {
+                  const topColor = isFlipped ? 'w' : 'b';
+                  const topSec = timeLeft[topColor];
+                  const isTopActive = !gameStatus.over && turn === topColor;
+                  const isLowTime = topSec < 20;
+                  return (
+                    <div
+                      className={`px-2 py-1 rounded-lg font-mono font-black text-xs sm:text-sm border flex items-center gap-1 transition-all ${
+                        isTopActive
+                          ? isLowTime
+                            ? 'bg-rose-500/25 border-rose-500 text-rose-300 animate-pulse shadow-sm shadow-rose-500/20'
+                            : 'bg-cyan-500/20 border-cyan-400 text-white shadow-sm shadow-cyan-500/20'
+                          : 'bg-slate-950/70 border-slate-800 text-slate-400'
+                      }`}
+                    >
+                      <Timer size={12} className={isTopActive ? (isLowTime ? 'text-rose-400' : 'text-cyan-400') : 'text-slate-500'} />
+                      <span>{formatChessClock(topSec)}</span>
+                    </div>
+                  );
+                })()}
+                {!isTimedGame && turn === (isFlipped ? 'w' : 'b') && (
+                  <span className="flex items-center gap-1 text-[9px] sm:text-[10px] font-bold text-cyan-400 uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 animate-pulse shrink-0">
+                    Turn
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Captured tray for top player */}
@@ -1366,11 +1532,33 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
                   </div>
                 </div>
               </div>
-              {turn === (isFlipped ? 'b' : 'w') && (
-                <span className="flex items-center gap-1 text-[9px] sm:text-[10px] font-bold text-cyan-400 uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 animate-pulse shrink-0">
-                  Turn
-                </span>
-              )}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {isTimedGame && (() => {
+                  const bottomColor = isFlipped ? 'b' : 'w';
+                  const bottomSec = timeLeft[bottomColor];
+                  const isBottomActive = !gameStatus.over && turn === bottomColor;
+                  const isLowTime = bottomSec < 20;
+                  return (
+                    <div
+                      className={`px-2 py-1 rounded-lg font-mono font-black text-xs sm:text-sm border flex items-center gap-1 transition-all ${
+                        isBottomActive
+                          ? isLowTime
+                            ? 'bg-rose-500/25 border-rose-500 text-rose-300 animate-pulse shadow-sm shadow-rose-500/20'
+                            : 'bg-cyan-500/20 border-cyan-400 text-white shadow-sm shadow-cyan-500/20'
+                          : 'bg-slate-950/70 border-slate-800 text-slate-400'
+                      }`}
+                    >
+                      <Timer size={12} className={isBottomActive ? (isLowTime ? 'text-rose-400' : 'text-cyan-400') : 'text-slate-500'} />
+                      <span>{formatChessClock(bottomSec)}</span>
+                    </div>
+                  );
+                })()}
+                {!isTimedGame && turn === (isFlipped ? 'b' : 'w') && (
+                  <span className="flex items-center gap-1 text-[9px] sm:text-[10px] font-bold text-cyan-400 uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 animate-pulse shrink-0">
+                    Turn
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Captured tray for bottom player */}
