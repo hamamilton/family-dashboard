@@ -175,6 +175,7 @@ export class ChessGameEngine {
       }
     }
 
+    this.history = [];
     this.positionHistory = [this.getRepetitionKey()];
   }
 

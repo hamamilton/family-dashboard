@@ -343,17 +343,21 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
     setTurn(engine.turn);
     const status = engine.getGameStatus();
     setGameStatus(status);
-    setHistory([...engine.history]);
     setCaptured(engine.getCapturedPieces());
 
     if (status.over) {
+      engine.history = [];
+      setHistory([]);
       setShowGameOverModal(true);
       if (status.winner) {
         chessAudio.playVictory();
         awardWinXP(status.winner);
       }
-    } else if (status.check) {
-      chessAudio.playCheck();
+    } else {
+      setHistory([...engine.history]);
+      if (status.check) {
+        chessAudio.playCheck();
+      }
     }
 
     // Request non-intrusive evaluation for eval bar
@@ -595,6 +599,8 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
       stockfishRef.current.startNewGame();
     }
     engine.load();
+    setHistory([]);
+    setEvalScore({ cp: 0, mate: null });
     setSelectedSquare(null);
     setLegalMoves([]);
     setLastMove(null);
