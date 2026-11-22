@@ -52,6 +52,7 @@ const BOARD_THEMES = [
     light: '#334155',
     dark: '#0f172a',
     border: 'border-cyan-500/40',
+    gridLine: 'rgba(56, 189, 248, 0.38)',
     highlight: 'rgba(6, 182, 212, 0.45)',
     lastMove: 'rgba(56, 189, 248, 0.25)',
     hint: 'rgba(234, 179, 8, 0.45)',
@@ -95,6 +96,7 @@ const BOARD_THEMES = [
     light: '#581c87',
     dark: '#1e1b4b',
     border: 'border-fuchsia-500/50',
+    gridLine: 'rgba(244, 114, 182, 0.6)',
     highlight: 'rgba(217, 70, 239, 0.45)',
     lastMove: 'rgba(168, 85, 247, 0.3)',
     hint: 'rgba(34, 211, 238, 0.45)'
@@ -115,6 +117,7 @@ const BOARD_THEMES = [
     light: '#44403c',
     dark: '#1c1917',
     border: 'border-orange-500/50',
+    gridLine: 'rgba(251, 146, 60, 0.48)',
     highlight: 'rgba(249, 115, 22, 0.5)',
     lastMove: 'rgba(234, 88, 12, 0.32)',
     hint: 'rgba(250, 204, 21, 0.5)'
@@ -130,6 +133,17 @@ const BOARD_THEMES = [
     hint: 'rgba(234, 179, 8, 0.45)'
   }
 ];
+
+function isDarkHexColor(hex) {
+  if (!hex || typeof hex !== 'string') return false;
+  const clean = hex.replace('#', '');
+  if (clean.length !== 6) return false;
+  const r = parseInt(clean.slice(0, 2), 16) / 255;
+  const g = parseInt(clean.slice(2, 4), 16) / 255;
+  const b = parseInt(clean.slice(4, 6), 16) / 255;
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return lum < 0.42;
+}
 
 const SKILL_LEVELS = [
   { level: 1, depth: 2, name: 'Level 1: Beginner', elo: '~800', desc: 'Friendly for kids, makes occasional blunders' },
@@ -950,9 +964,17 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
   };
 
   const baseTheme = BOARD_THEMES[themeIdx] || BOARD_THEMES[0];
-  const theme = baseTheme.id === 'custom'
-    ? { ...baseTheme, light: customColors.lightSquare, dark: customColors.darkSquare }
-    : baseTheme;
+  const theme = useMemo(() => {
+    const resolved = baseTheme.id === 'custom'
+      ? { ...baseTheme, light: customColors.lightSquare, dark: customColors.darkSquare }
+      : baseTheme;
+    const autoGridLine = resolved.gridLine || (
+      isDarkHexColor(resolved.light) && isDarkHexColor(resolved.dark)
+        ? 'rgba(226, 232, 240, 0.42)'
+        : null
+    );
+    return { ...resolved, gridLine: autoGridLine };
+  }, [baseTheme, customColors]);
   const kingInCheckSq = gameStatus.check ? engine.getKingSquare(turn) : -1;
 
   // Material evaluation percentage for the eval bar
@@ -1719,7 +1741,8 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
                     style={{
                       backgroundColor: bgSquareColor,
                       backgroundImage: theme.pattern || undefined,
-                      backgroundSize: theme.id === 'cyber' ? '12px 12px' : undefined
+                      backgroundSize: theme.id === 'cyber' ? '12px 12px' : undefined,
+                      boxShadow: theme.gridLine ? `inset 0 0 0 0.75px ${theme.gridLine}` : undefined
                     }}
                     className="relative w-full h-full flex items-center justify-center cursor-pointer select-none transition-colors"
                   >
@@ -2136,6 +2159,8 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
                   const isActive = themeIdx === idx;
                   const lightCol = b.id === 'custom' ? customColors.lightSquare : b.light;
                   const darkCol = b.id === 'custom' ? customColors.darkSquare : b.dark;
+                  const swatchLine = b.gridLine || (isDarkHexColor(lightCol) && isDarkHexColor(darkCol) ? 'rgba(226, 232, 240, 0.42)' : null);
+                  const swatchShadow = swatchLine ? `inset 0 0 0 0.75px ${swatchLine}` : undefined;
                   return (
                     <button
                       key={b.id}
@@ -2148,10 +2173,10 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
                     >
                       {/* 2x2 Mini Board Swatch */}
                       <div className="w-10 h-10 rounded-lg overflow-hidden grid grid-cols-2 grid-rows-2 border border-slate-700 shrink-0 shadow">
-                        <div style={{ backgroundColor: lightCol }} />
-                        <div style={{ backgroundColor: darkCol }} />
-                        <div style={{ backgroundColor: darkCol }} />
-                        <div style={{ backgroundColor: lightCol }} />
+                        <div style={{ backgroundColor: lightCol, boxShadow: swatchShadow }} />
+                        <div style={{ backgroundColor: darkCol, boxShadow: swatchShadow }} />
+                        <div style={{ backgroundColor: darkCol, boxShadow: swatchShadow }} />
+                        <div style={{ backgroundColor: lightCol, boxShadow: swatchShadow }} />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="font-bold text-xs text-white truncate flex items-center justify-between">
