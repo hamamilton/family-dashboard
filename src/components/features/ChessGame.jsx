@@ -9,6 +9,11 @@ import {
   isBlack
 } from '../../lib/chessEngine';
 import { StockfishService } from '../../lib/stockfishService';
+import {
+  CHESS_OPENINGS_DB,
+  detectOpeningAndCoach,
+  analyzePlayedMove
+} from '../../lib/chessOpenings';
 import { ChessPiece, PIECE_SKINS } from './ChessPieces';
 import { pb } from '../../lib/pocketbase';
 import {
@@ -31,7 +36,10 @@ import {
   Sliders,
   Check,
   User,
-  X
+  X,
+  BookOpen,
+  GraduationCap,
+  Shield
 } from 'lucide-react';
 
 const BOARD_THEMES = [
@@ -333,6 +341,15 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
   const [xpAwarded, setXpAwarded] = useState(false);
   const historyEndRef = useRef(null);
 
+  // Opening & Defense Coach / Academy state
+  const [activeLesson, setActiveLesson] = useState(null); // entry from CHESS_OPENINGS_DB
+  const [showLearnModal, setShowLearnModal] = useState(false);
+  const [learnTab, setLearnTab] = useState('opening'); // 'opening' | 'defense'
+  const [moveQualities, setMoveQualities] = useState({}); // { [plyIdx]: { badge, color, tip } }
+  const [latestMoveFeedback, setLatestMoveFeedback] = useState(null);
+  const [hoveredBookMove, setHoveredBookMove] = useState(null); // { from, to, san, note }
+  const lastEvalCpRef = useRef(0);
+
   // Initialize profiles
   useEffect(() => {
     if (profiles.length > 0 && !selectedProfiles[1] && !selectedProfiles[2]) {
@@ -387,7 +404,23 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
     };
 
     sf.onEvaluation = ({ cp, mate }) => {
+      const numericCp = cp !== null ? cp : (mate !== null ? (mate > 0 ? 2000 : -2000) : 0);
       setEvalScore({ cp: cp !== null ? cp : 0, mate });
+      // Update quality of the most recent move once Stockfish evaluates the new position
+      const histLen = engine.history.length;
+      if (histLen > 0) {
+        const lastRecord = engine.history[histLen - 1];
+        const plyIdx = histLen - 1;
+        const playedSans = engine.history.map(h => (h.san || '').replace(/[+#?!]/g, '').trim());
+        const isBook = CHESS_OPENINGS_DB.some(entry =>
+          entry.moves.length >= histLen &&
+          entry.moves.slice(0, histLen).every((m, idx) => m.replace(/[+#?!]/g, '').trim() === playedSans[idx])
+        );
+        const analysis = analyzePlayedMove(lastRecord, isBook, lastEvalCpRef.current, numericCp);
+        setMoveQualities(prev => ({ ...prev, [plyIdx]: analysis }));
+        setLatestMoveFeedback({ san: lastRecord.san, ...analysis });
+      }
+      lastEvalCpRef.current = numericCp;
     };
 
     sf.onFallbackCalculate = () => {
@@ -427,13 +460,28 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
     if (status.over) {
       engine.history = [];
       setHistory([]);
+      setMoveQualities({});
+      setLatestMoveFeedback(null);
       setShowGameOverModal(true);
       if (status.winner) {
         chessAudio.playVictory();
         awardWinXP(status.winner);
       }
     } else {
-      setHistory([...engine.history]);
+      const curHistory = [...engine.history];
+      setHistory(curHistory);
+      if (curHistory.length > 0) {
+        const plyIdx = curHistory.length - 1;
+        const lastRecord = curHistory[plyIdx];
+        const playedSans = curHistory.map(h => (h.san || '').replace(/[+#?!]/g, '').trim());
+        const isBook = CHESS_OPENINGS_DB.some(entry =>
+          entry.moves.length >= curHistory.length &&
+          entry.moves.slice(0, curHistory.length).every((m, idx) => m.replace(/[+#?!]/g, '').trim() === playedSans[idx])
+        );
+        const initialAnalysis = analyzePlayedMove(lastRecord, isBook, null, null);
+        setMoveQualities(prev => (prev[plyIdx] ? prev : { ...prev, [plyIdx]: initialAnalysis }));
+        setLatestMoveFeedback({ san: lastRecord.san, ...initialAnalysis });
+      }
       if (status.check) {
         chessAudio.playCheck();
       }
@@ -478,11 +526,45 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
     }
   };
 
-  // Trigger Stockfish move
+  // Trigger Stockfish move (or guided Book Move when practicing an Opening/Defense lesson!)
   const triggerStockfishMove = useCallback(() => {
     if (engine.isGameOver()) return;
     setIsThinking(true);
     setStockfishHint(null);
+
+    // If an Opening/Defense Lesson is active, check if we are still on the book line
+    if (activeLesson && engine.history.length < activeLesson.moves.length) {
+      const ply = engine.history.length;
+      const playedSans = engine.history.map(h => (h.san || '').replace(/[+#?!]/g, '').trim());
+      const onBookSoFar = playedSans.every(
+        (s, idx) => s === activeLesson.moves[idx].replace(/[+#?!]/g, '').trim()
+      );
+      if (onBookSoFar) {
+        const targetSan = activeLesson.moves[ply].replace(/[+#?!]/g, '').trim();
+        const legal = engine.getLegalMoves();
+        const bookMoveObj = legal.find(
+          m => engine.moveToSan(m, legal).replace(/[+#?!]/g, '').trim() === targetSan
+        );
+        if (bookMoveObj) {
+          setTimeout(() => {
+            setIsThinking(false);
+            const record = engine.playMove(bookMoveObj);
+            if (record) {
+              if (record.captured || record.isEnPassant) {
+                chessAudio.playCapture();
+              } else if (record.isCastle) {
+                chessAudio.playCastle();
+              } else {
+                chessAudio.playMove();
+              }
+              setLastMove({ from: record.from, to: record.to });
+              syncGameState();
+            }
+          }, 350);
+          return;
+        }
+      }
+    }
 
     const sf = stockfishRef.current;
     if (!sf) return;
@@ -511,7 +593,7 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
       movetime: Math.min(1800, currentConfig.depth * 150),
       skillLevel: currentConfig.level
     });
-  }, [engine, skillIdx, syncGameState]);
+  }, [engine, skillIdx, syncGameState, activeLesson]);
 
   // Check if Stockfish should move (ONLY in vs-stockfish mode and ONLY on computer's turn!)
   useEffect(() => {
@@ -672,13 +754,47 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
   };
 
   // New Game
-  const handleNewGame = () => {
+  const handleNewGame = (keepLesson = false) => {
     if (stockfishRef.current) {
       stockfishRef.current.stop();
       stockfishRef.current.startNewGame();
     }
     engine.load();
     setHistory([]);
+    setMoveQualities({});
+    setLatestMoveFeedback(null);
+    setHoveredBookMove(null);
+    lastEvalCpRef.current = 0;
+    if (!keepLesson) {
+      setActiveLesson(null);
+    }
+    setEvalScore({ cp: 0, mate: null });
+    setSelectedSquare(null);
+    setLegalMoves([]);
+    setLastMove(null);
+    setStockfishHint(null);
+    setShowGameOverModal(false);
+    setXpAwarded(false);
+    setIsThinking(false);
+    syncGameState();
+  };
+
+  // Start a guided Opening or Defense lesson
+  const handleStartLesson = (lessonEntry) => {
+    setGameMode('stockfish');
+    setPlayerColor(lessonEntry.side || 'w');
+    setActiveLesson(lessonEntry);
+    setShowLearnModal(false);
+    if (stockfishRef.current) {
+      stockfishRef.current.stop();
+      stockfishRef.current.startNewGame();
+    }
+    engine.load();
+    setHistory([]);
+    setMoveQualities({});
+    setLatestMoveFeedback(null);
+    setHoveredBookMove(null);
+    lastEvalCpRef.current = 0;
     setEvalScore({ cp: 0, mate: null });
     setSelectedSquare(null);
     setLegalMoves([]);
@@ -731,6 +847,50 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
   const p2Name = playerNames[2] || 'Player 2';
   const p1Profile = profiles.find(p => p.id === selectedProfiles[1]);
   const p2Profile = profiles.find(p => p.id === selectedProfiles[2]);
+
+  // Real-time Opening & Defense detection and next book moves
+  const openingCoach = useMemo(() => {
+    return detectOpeningAndCoach(history, engine);
+  }, [history, engine, board]);
+
+  // Active guided lesson target (when practicing a chosen Opening or Defense)
+  const guidedLessonStep = useMemo(() => {
+    if (!activeLesson || gameStatus.over) return null;
+    const ply = history.length;
+    const playedSans = history.map(h => (h.san || '').replace(/[+#?!]/g, '').trim());
+    const onBookSoFar = playedSans.every(
+      (s, idx) => idx < activeLesson.moves.length && s === activeLesson.moves[idx].replace(/[+#?!]/g, '').trim()
+    );
+
+    if (!onBookSoFar) {
+      return {
+        status: 'off_book',
+        message: 'You deviated from the lesson line! Click Undo to return to the guided move, or keep playing freely.'
+      };
+    }
+
+    if (ply >= activeLesson.moves.length) {
+      return {
+        status: 'completed',
+        message: `🎉 ${activeLesson.name} book line completed! Now play out the game against Stockfish!`
+      };
+    }
+
+    const expectedSan = activeLesson.moves[ply];
+    const cleanSan = expectedSan.replace(/[+#?!]/g, '').trim();
+    const legal = engine.getLegalMoves();
+    const moveObj = legal.find(m => engine.moveToSan(m, legal).replace(/[+#?!]/g, '').trim() === cleanSan);
+
+    return {
+      status: 'active',
+      stepNum: ply + 1,
+      totalSteps: activeLesson.moves.length,
+      san: expectedSan,
+      note: activeLesson.moveNotes?.[ply] || activeLesson.summary,
+      from: moveObj ? moveObj.from : -1,
+      to: moveObj ? moveObj.to : -1
+    };
+  }, [activeLesson, history, engine, board, gameStatus.over]);
 
   return (
     <div
@@ -825,6 +985,20 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
 
         {/* Right: Quick actions */}
         <div className="flex items-center gap-1.5">
+          {/* Learn Openings & Defenses Academy */}
+          <button
+            onClick={() => setShowLearnModal(true)}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border font-bold text-xs transition ${
+              activeLesson
+                ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-sm'
+                : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/40'
+            }`}
+            title="Learn Chess Openings & Defenses with Guided Interactive Lessons"
+          >
+            <GraduationCap size={14} />
+            <span>{activeLesson ? 'Lesson Active' : 'Learn'}</span>
+          </button>
+
           {/* Ask Stockfish Hint */}
           <button
             onClick={handleAskStockfish}
@@ -993,32 +1167,103 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
             </div>
           </div>
 
-          {/* Engine Status / Hint Card */}
-          <div className="hidden lg:flex flex-col gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 text-xs">
+          {/* Opening & Defense Coach + Engine Status Card */}
+          <div className="hidden lg:flex flex-col gap-2 p-2.5 rounded-xl bg-slate-950/75 border border-slate-800 text-xs">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                {gameMode === 'stockfish' ? 'Engine Status' : 'Match Mode'}
+              <span className="text-[10px] uppercase font-bold text-cyan-400 tracking-wider flex items-center gap-1">
+                <BookOpen size={12} />
+                <span>Opening & Defense Coach</span>
               </span>
               {gameMode === 'stockfish' ? (
                 isThinking ? (
-                  <span className="flex items-center gap-1.5 text-cyan-400 font-bold text-[11px]">
+                  <span className="flex items-center gap-1.5 text-cyan-400 font-bold text-[10px]">
                     <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-                    Calculating...
+                    Thinking...
                   </span>
                 ) : (
-                  <span className="text-emerald-400 font-bold text-[11px] flex items-center gap-1">
-                    <Check size={12} /> Stockfish Ready
+                  <span className="text-emerald-400 font-bold text-[10px] flex items-center gap-1">
+                    <Check size={11} /> Ready
                   </span>
                 )
               ) : (
-                <span className="text-emerald-400 font-bold text-[11px] flex items-center gap-1">
-                  <Users size={12} /> 2 Players
+                <span className="text-emerald-400 font-bold text-[10px] flex items-center gap-1">
+                  <Users size={11} /> 2P
                 </span>
               )}
             </div>
 
+            {/* Active Opening / Defense Identification */}
+            <div className="p-2 rounded-lg bg-slate-900/90 border border-slate-800">
+              {openingCoach.opening ? (
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 font-mono font-black text-[10px]">
+                      {openingCoach.opening.eco}
+                    </span>
+                    <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
+                      openingCoach.opening.category === 'defense'
+                        ? 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30'
+                        : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    }`}>
+                      {openingCoach.opening.category === 'defense' ? '🛡️ Defense' : '⚔️ Opening'}
+                    </span>
+                  </div>
+                  <div className="font-black text-white text-xs leading-snug mt-0.5">
+                    {openingCoach.opening.name}
+                  </div>
+                </div>
+              ) : (
+                <div className="font-bold text-slate-300 text-xs">
+                  Starting Position
+                </div>
+              )}
+              <p className="text-[11px] text-slate-300 leading-relaxed mt-1">
+                {openingCoach.coachNote}
+              </p>
+            </div>
+
+            {/* Latest Move Quality Feedback */}
+            {latestMoveFeedback && (
+              <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/90 flex flex-col gap-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-400">
+                    Last Move: <strong className="text-white font-mono">{latestMoveFeedback.san}</strong>
+                  </span>
+                  <span className={`text-[10px] font-black px-1.5 py-0.5 rounded border ${latestMoveFeedback.color}`}>
+                    {latestMoveFeedback.badge}
+                  </span>
+                </div>
+                <div className="text-[10px] text-slate-300 leading-snug">
+                  {latestMoveFeedback.tip}
+                </div>
+              </div>
+            )}
+
+            {/* Next Book Continuations */}
+            {openingCoach.nextBookMoves?.length > 0 && (
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Book Continuations (Hover to preview):
+                </span>
+                <div className="flex flex-wrap gap-1">
+                  {openingCoach.nextBookMoves.slice(0, 4).map((bm, idx) => (
+                    <button
+                      key={idx}
+                      onMouseEnter={() => bm.coords && setHoveredBookMove({ ...bm.coords, san: bm.san, note: bm.note })}
+                      onMouseLeave={() => setHoveredBookMove(null)}
+                      onClick={() => bm.coords && setHoveredBookMove(prev => (prev?.san === bm.san ? null : { ...bm.coords, san: bm.san, note: bm.note }))}
+                      className="px-2 py-0.5 rounded-md bg-emerald-500/15 hover:bg-emerald-500/30 border border-emerald-500/30 text-emerald-300 font-mono font-bold text-[11px] transition flex items-center gap-1"
+                      title={`${bm.openingName}: ${bm.note}`}
+                    >
+                      <span>📖 {bm.san}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {stockfishHint && (
-              <div className="mt-1 p-2 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs flex items-start gap-2">
+              <div className="p-2 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs flex items-start gap-2">
                 <Lightbulb size={14} className="flex-none text-amber-400 mt-0.5" />
                 <div>
                   <div className="font-bold text-[11px]">Stockfish Suggestion:</div>
@@ -1142,9 +1387,82 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
           )}
 
           {/* CHESS BOARD GRID CONTAINER */}
-          <div className="relative flex flex-col items-center">
+          <div className="relative flex flex-col items-center gap-1.5">
+            {/* Compact Live Opening / Guided Lesson Banner Above Board */}
+            <div className="w-[320px] sm:w-[420px] md:w-[480px] lg:w-[500px] px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between gap-2 text-xs">
+              {activeLesson && guidedLessonStep ? (
+                <div className="flex items-center justify-between w-full gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-black text-[10px] uppercase shrink-0">
+                        🎓 {activeLesson.name}
+                      </span>
+                      {guidedLessonStep.status === 'active' && (
+                        <span className="text-[11px] font-bold text-white truncate">
+                          Step {guidedLessonStep.stepNum}/{guidedLessonStep.totalSteps}: Play <strong className="text-emerald-400 font-mono">{guidedLessonStep.san}</strong>
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-slate-300 truncate mt-0.5">
+                      {guidedLessonStep.status === 'active' ? guidedLessonStep.note : guidedLessonStep.message}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setActiveLesson(null)}
+                    className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-[10px] font-bold shrink-0"
+                    title="Exit Guided Lesson"
+                  >
+                    Exit Lesson
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between w-full gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {openingCoach.opening ? (
+                      <>
+                        <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 font-mono font-black text-[10px] shrink-0">
+                          {openingCoach.opening.eco}
+                        </span>
+                        <span className="font-bold text-white truncate text-xs">
+                          {openingCoach.opening.name}
+                        </span>
+                        <span className={`hidden sm:inline-block text-[9px] font-black uppercase px-1.5 py-0.5 rounded shrink-0 ${
+                          openingCoach.opening.category === 'defense'
+                            ? 'bg-fuchsia-500/20 text-fuchsia-300'
+                            : 'bg-emerald-500/20 text-emerald-300'
+                        }`}>
+                          {openingCoach.opening.category === 'defense' ? 'Defense' : 'Opening'}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-slate-400 text-[11px] truncate">
+                        📖 Make a first move (e.g. 1. e4 or 1. d4) or click <strong className="text-emerald-400">Learn</strong>
+                      </span>
+                    )}
+                  </div>
+                  {openingCoach.nextBookMoves?.length > 0 && (
+                    <div className="hidden sm:flex items-center gap-1 shrink-0">
+                      <span className="text-[10px] text-slate-500 font-bold">Book:</span>
+                      {openingCoach.nextBookMoves.slice(0, 3).map((bm, i) => (
+                        <button
+                          key={i}
+                          onMouseEnter={() => bm.coords && setHoveredBookMove({ ...bm.coords, san: bm.san, note: bm.note })}
+                          onMouseLeave={() => setHoveredBookMove(null)}
+                          onClick={() => bm.coords && setHoveredBookMove(prev => (prev?.san === bm.san ? null : { ...bm.coords, san: bm.san, note: bm.note }))}
+                          className="px-1.5 py-0.5 rounded bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-300 font-mono font-bold text-[10px] border border-emerald-500/30"
+                          title={`${bm.openingName}: ${bm.note}`}
+                        >
+                          {bm.san}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div
-              className={`relative grid grid-cols-8 grid-rows-8 w-[320px] h-[320px] sm:w-[420px] sm:h-[420px] md:w-[480px] md:h-[480px] lg:w-[500px] lg:h-[500px] rounded-xl overflow-hidden border-2 ${theme.border} shadow-2xl transition-all`}
+              className={`relative grid grid-cols-8 grid-rows-8 w-[310px] h-[310px] sm:w-[410px] sm:h-[410px] md:w-[460px] md:h-[460px] lg:w-[475px] lg:h-[475px] rounded-xl overflow-hidden border-2 ${theme.border} shadow-2xl transition-all`}
             >
               {squareIndices.map((sqIdx) => {
                 const { col, row } = squareToColRow(sqIdx);
@@ -1156,6 +1474,12 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
                 const isLastMoveSq = lastMove && (lastMove.from === sqIdx || lastMove.to === sqIdx);
                 const isKingInCheck = sqIdx === kingInCheckSq;
                 const isHintTarget = stockfishHint && (stockfishHint.from === sqIdx || stockfishHint.to === sqIdx);
+                const isBookGuideSq =
+                  (guidedLessonStep?.status === 'active' && (guidedLessonStep.from === sqIdx || guidedLessonStep.to === sqIdx)) ||
+                  (hoveredBookMove && (hoveredBookMove.from === sqIdx || hoveredBookMove.to === sqIdx));
+                const isBookDestSq =
+                  (guidedLessonStep?.status === 'active' && guidedLessonStep.to === sqIdx) ||
+                  (hoveredBookMove && hoveredBookMove.to === sqIdx);
 
                 const bgSquareColor = isLight ? theme.light : theme.dark;
 
@@ -1204,6 +1528,20 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
                         className="absolute inset-0 border-2 border-amber-400 animate-pulse pointer-events-none"
                         style={{ backgroundColor: theme.hint }}
                       />
+                    )}
+
+                    {/* Guided Book / Lesson Move Highlight */}
+                    {isBookGuideSq && (
+                      <div
+                        className="absolute inset-0 border-2 border-emerald-400 animate-pulse pointer-events-none"
+                        style={{ backgroundColor: 'rgba(16, 185, 129, 0.35)' }}
+                      >
+                        {isBookDestSq && (
+                          <span className="absolute top-0.5 right-0.5 px-1 rounded bg-emerald-500 text-slate-950 font-black text-[8px] uppercase shadow">
+                            Book
+                          </span>
+                        )}
+                      </div>
                     )}
 
                     {/* Check Warning on King */}
@@ -1278,16 +1616,34 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
               </div>
             ) : (
               Array.from({ length: Math.ceil(history.length / 2) }).map((_, moveIdx) => {
-                const whiteMove = history[moveIdx * 2];
-                const blackMove = history[moveIdx * 2 + 1];
+                const wPly = moveIdx * 2;
+                const bPly = moveIdx * 2 + 1;
+                const whiteMove = history[wPly];
+                const blackMove = history[bPly];
+                const wQual = moveQualities[wPly];
+                const bQual = moveQualities[bPly];
                 return (
                   <div
                     key={moveIdx}
-                    className="grid grid-cols-7 py-1 px-2 rounded hover:bg-slate-800/60 transition"
+                    className="grid grid-cols-7 items-center py-1 px-1.5 rounded hover:bg-slate-800/60 transition gap-1"
                   >
                     <span className="col-span-1 text-slate-500">{moveIdx + 1}.</span>
-                    <span className="col-span-3 font-semibold text-slate-200">{whiteMove?.san || ''}</span>
-                    <span className="col-span-3 font-semibold text-slate-400">{blackMove?.san || ''}</span>
+                    <div className="col-span-3 flex items-center gap-1 min-w-0" title={wQual?.tip || ''}>
+                      <span className="font-semibold text-slate-200 truncate">{whiteMove?.san || ''}</span>
+                      {wQual && (
+                        <span className={`text-[8px] px-1 rounded border leading-tight shrink-0 ${wQual.color}`}>
+                          {wQual.badge.split(' ')[0]}
+                        </span>
+                      )}
+                    </div>
+                    <div className="col-span-3 flex items-center gap-1 min-w-0" title={bQual?.tip || ''}>
+                      <span className="font-semibold text-slate-400 truncate">{blackMove?.san || ''}</span>
+                      {bQual && (
+                        <span className={`text-[8px] px-1 rounded border leading-tight shrink-0 ${bQual.color}`}>
+                          {bQual.badge.split(' ')[0]}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 );
               })
@@ -1307,6 +1663,134 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
           </div>
         </div>
       </div>
+
+      {/* OPENING & DEFENSE ACADEMY MODAL */}
+      {showLearnModal && (
+        <div className="absolute inset-0 z-40 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 md:p-6">
+          <div className="w-full max-w-3xl max-h-full overflow-y-auto custom-scrollbar bg-slate-900 border border-slate-800 rounded-3xl p-4 md:p-6 shadow-2xl flex flex-col gap-4">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400">
+                  <GraduationCap size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white tracking-wide">
+                    Chess Opening & Defense Academy
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Pick a famous White Opening or Black Defense to practice step-by-step on the board with guided moves
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowLearnModal(false)}
+                className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Category Tabs: White Openings vs Black Defenses */}
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                <button
+                  onClick={() => setLearnTab('opening')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                    learnTab === 'opening'
+                      ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Swords size={13} />
+                  <span>White Openings (Attack & Control)</span>
+                </button>
+                <button
+                  onClick={() => setLearnTab('defense')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                    learnTab === 'defense'
+                      ? 'bg-fuchsia-500 text-slate-950 shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Shield size={13} />
+                  <span>Black Defenses (Counter-Attack)</span>
+                </button>
+              </div>
+
+              {activeLesson && (
+                <button
+                  onClick={() => { setActiveLesson(null); setShowLearnModal(false); }}
+                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold"
+                >
+                  Clear Active Lesson
+                </button>
+              )}
+            </div>
+
+            {/* Grid of Openings or Defenses */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {CHESS_OPENINGS_DB.filter(
+                entry => entry.category === learnTab && entry.moves.length >= 3
+              ).map((entry) => {
+                const isSelectedLesson = activeLesson?.id === entry.id;
+                return (
+                  <div
+                    key={entry.id}
+                    className={`p-3.5 rounded-2xl border flex flex-col justify-between gap-3 transition ${
+                      isSelectedLesson
+                        ? 'bg-emerald-500/15 border-emerald-400 shadow-lg shadow-emerald-500/10'
+                        : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex flex-col gap-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 font-mono font-black text-[10px]">
+                            {entry.eco}
+                          </span>
+                          <h4 className="font-black text-white text-sm">
+                            {entry.name}
+                          </h4>
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-400">
+                          Play as {entry.side === 'w' ? 'White' : 'Black'}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        {entry.summary}
+                      </p>
+
+                      {/* Move Line Pill */}
+                      <div className="mt-1 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 font-mono text-[11px] text-cyan-300 overflow-x-auto whitespace-nowrap">
+                        {entry.moves.map((m, idx) => (
+                          <span key={idx} className="mr-1.5">
+                            {idx % 2 === 0 ? <span className="text-slate-500">{Math.floor(idx / 2) + 1}.</span> : null}
+                            <span className={idx % 2 === 0 ? 'text-white font-bold' : 'text-cyan-300'}> {m}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleStartLesson(entry)}
+                      className={`w-full py-2 rounded-xl font-black text-xs uppercase tracking-wider transition flex items-center justify-center gap-1.5 ${
+                        entry.category === 'defense'
+                          ? 'bg-fuchsia-500 hover:bg-fuchsia-400 text-slate-950'
+                          : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                      }`}
+                    >
+                      <GraduationCap size={14} />
+                      <span>Practice This {entry.category === 'defense' ? 'Defense' : 'Opening'}</span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* SKINS & BOARD CUSTOMIZER MODAL */}
       {showSkinModal && (
