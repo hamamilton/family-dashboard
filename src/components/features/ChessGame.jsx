@@ -29,7 +29,8 @@ import {
   ChevronRight,
   ShieldAlert,
   Sliders,
-  Check
+  Check,
+  User
 } from 'lucide-react';
 
 const BOARD_THEMES = [
@@ -227,9 +228,9 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
   const [isFullViewport, setIsFullViewport] = useState(false);
   const [muted, setMuted] = useState(false);
 
-  // Player selection (Pass & Play)
+  // Player selection (Pass & Play & vs Stockfish)
   const [selectedProfiles, setSelectedProfiles] = useState({ 1: '', 2: '' });
-  const [playerNames, setPlayerNames] = useState({ 1: 'White', 2: 'Black' });
+  const [playerNames, setPlayerNames] = useState({ 1: 'Player 1', 2: 'Player 2' });
 
   // Board interaction state
   const [board, setBoard] = useState(() => [...engine.board]);
@@ -263,18 +264,32 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
         2: p2 ? p2.id : 'custom2'
       });
       setPlayerNames({
-        1: p1 ? p1.name : 'White',
-        2: p2 ? p2.name : 'Black'
+        1: p1 ? p1.name : 'Player 1',
+        2: p2 ? p2.name : 'Player 2'
       });
     }
   }, [profiles, selectedProfiles]);
+
+  const handleProfileChange = (playerSlot, profileId) => {
+    if (profileId === 'custom') {
+      const defaultName = playerSlot === 1 ? 'Player 1' : 'Player 2';
+      setSelectedProfiles(prev => ({ ...prev, [playerSlot]: 'custom' }));
+      setPlayerNames(prev => ({ ...prev, [playerSlot]: defaultName }));
+    } else {
+      const selected = profiles.find(p => p.id === profileId);
+      if (selected) {
+        setSelectedProfiles(prev => ({ ...prev, [playerSlot]: selected.id }));
+        setPlayerNames(prev => ({ ...prev, [playerSlot]: selected.name }));
+      }
+    }
+  };
 
   // Keep audio muted state in sync
   useEffect(() => {
     chessAudio.muted = muted;
   }, [muted]);
 
-  // Sync orientation when playerColor changes
+  // Sync orientation when playerColor changes in vs-Stockfish
   useEffect(() => {
     if (gameMode === 'stockfish') {
       setIsFlipped(playerColor === 'b');
@@ -289,7 +304,6 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
     sf.onReady = () => {
       setEngineReady(true);
       sf.setSkillLevel(SKILL_LEVELS[skillIdx].level);
-      // Run initial evaluation
       sf.evaluatePosition(engine.getFen(), 10);
     };
 
@@ -336,14 +350,13 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
       setShowGameOverModal(true);
       if (status.winner) {
         chessAudio.playVictory();
-        // Award XP if in Stockfish mode and human won, or if in PvP
         awardWinXP(status.winner);
       }
     } else if (status.check) {
       chessAudio.playCheck();
     }
 
-    // Request engine evaluation
+    // Request non-intrusive evaluation for eval bar
     if (stockfishRef.current && !status.over) {
       stockfishRef.current.evaluatePosition(engine.getFen(), 10);
     }
@@ -357,7 +370,7 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
       if (gameMode === 'stockfish') {
         const isHumanWinner = (winnerName === 'White' && playerColor === 'w') ||
                               (winnerName === 'Black' && playerColor === 'b');
-        if (isHumanWinner && selectedProfiles[1] && selectedProfiles[1] !== 'custom1') {
+        if (isHumanWinner && selectedProfiles[1] && !selectedProfiles[1].startsWith('custom')) {
           winningProfileId = selectedProfiles[1];
         }
       } else {
@@ -417,7 +430,7 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
     });
   }, [engine, skillIdx, syncGameState]);
 
-  // Check if Stockfish should move
+  // Check if Stockfish should move (ONLY in vs-stockfish mode and ONLY on computer's turn!)
   useEffect(() => {
     if (gameMode === 'stockfish' && !gameStatus.over) {
       const isComputerTurn = (turn === 'w' && playerColor === 'b') ||
@@ -425,7 +438,7 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
       if (isComputerTurn && !isThinking) {
         const timer = setTimeout(() => {
           triggerStockfishMove();
-        }, 300);
+        }, 350);
         return () => clearTimeout(timer);
       }
     }
@@ -479,7 +492,7 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
       }
     }
 
-    // Select piece if it belongs to current player
+    // Select piece if it belongs to current player's turn
     if (pieceOnSquare) {
       const isPieceCurrentTurn = (turn === 'w' && isWhite(pieceOnSquare)) ||
                                  (turn === 'b' && isBlack(pieceOnSquare));
@@ -527,13 +540,13 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
     setLegalMoves([]);
   };
 
-  // Request Stockfish Hint
+  // Request Stockfish Hint without playing it
   const handleAskStockfish = () => {
     if (gameStatus.over || isThinking) return;
     const sf = stockfishRef.current;
     if (!sf) return;
 
-    sf.onBestMove = (bestMoveUci) => {
+    sf.onHint = (bestMoveUci) => {
       if (bestMoveUci && bestMoveUci.length >= 4) {
         const from = nameToSquare(bestMoveUci.slice(0, 2));
         const to = nameToSquare(bestMoveUci.slice(2, 4));
@@ -543,12 +556,16 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
       }
     };
 
-    sf.findBestMove(engine.getFen(), { depth: 12, movetime: 1200, skillLevel: 20 });
+    sf.findHint(engine.getFen(), { depth: 12, movetime: 1200 });
   };
 
   // Undo move
   const handleUndo = () => {
     if (isThinking || history.length === 0) return;
+    if (stockfishRef.current) {
+      stockfishRef.current.stop();
+    }
+
     if (gameMode === 'stockfish') {
       // Undo both computer's move and player's move
       engine.undo();
@@ -564,6 +581,7 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
     setStockfishHint(null);
     setShowGameOverModal(false);
     setXpAwarded(false);
+    setIsThinking(false);
 
     const last = engine.history[engine.history.length - 1];
     setLastMove(last ? { from: last.from, to: last.to } : null);
@@ -572,16 +590,18 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
 
   // New Game
   const handleNewGame = () => {
-    engine.load();
     if (stockfishRef.current) {
+      stockfishRef.current.stop();
       stockfishRef.current.startNewGame();
     }
+    engine.load();
     setSelectedSquare(null);
     setLegalMoves([]);
     setLastMove(null);
     setStockfishHint(null);
     setShowGameOverModal(false);
     setXpAwarded(false);
+    setIsThinking(false);
     syncGameState();
   };
 
@@ -593,9 +613,7 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
     if (evalScore.mate !== null) {
       return evalScore.mate > 0 ? 100 : 0;
     }
-    // Clamp cp between -1000 and +1000 for display
     const cp = Math.max(-1000, Math.min(1000, evalScore.cp));
-    // Sigmoid or linear mapping from -1000..+1000 to 0..100%
     return 50 + (cp / 1000) * 45;
   }, [evalScore]);
 
@@ -623,6 +641,8 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
 
   const p1Name = playerNames[1] || 'Player 1';
   const p2Name = playerNames[2] || 'Player 2';
+  const p1Profile = profiles.find(p => p.id === selectedProfiles[1]);
+  const p2Profile = profiles.find(p => p.id === selectedProfiles[2]);
 
   return (
     <div
@@ -682,7 +702,7 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
                 className={`px-2 py-0.5 rounded font-bold text-[11px] ${
                   playerColor === 'w' ? 'bg-slate-200 text-slate-900' : 'text-slate-400 hover:text-white'
                 }`}
-                title="Play as White"
+                title="You play as White"
               >
                 White
               </button>
@@ -691,11 +711,27 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
                 className={`px-2 py-0.5 rounded font-bold text-[11px] ${
                   playerColor === 'b' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
                 }`}
-                title="Play as Black"
+                title="You play as Black"
               >
                 Black
               </button>
             </div>
+          )}
+
+          {/* Auto flip toggle in Pass & Play */}
+          {gameMode === 'pvp' && (
+            <button
+              onClick={() => setAutoFlipTurn(f => !f)}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-xs font-bold transition ${
+                autoFlipTurn
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                  : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+              }`}
+              title="Automatically flip board on each turn (great for tablet placed flat on table)"
+            >
+              <ArrowUpDown size={12} />
+              <span>Auto-Flip</span>
+            </button>
           )}
         </div>
 
@@ -773,42 +809,78 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
 
       {/* MAIN GAME VIEW: 3-Column Split or Stacked on Mobile */}
       <div className="flex-1 min-h-0 w-full p-2 md:p-4 flex flex-col lg:flex-row items-center justify-center gap-4 overflow-hidden">
-        {/* LEFT / SIDEBAR: Player Info & Status Card */}
+        {/* LEFT / SIDEBAR: Player Cards & Profiles */}
         <div className="w-full lg:w-72 flex-none flex flex-row lg:flex-col justify-between gap-3 bg-slate-900/70 border border-slate-800 p-3 rounded-2xl">
-          {/* Top Player (Opponent or Black) */}
+          {/* Top Player Card (Opponent or Black) */}
           <div className={`p-2.5 rounded-xl border transition-all ${
             turn === (isFlipped ? 'w' : 'b')
               ? 'bg-slate-800/90 border-cyan-500/60 shadow-lg shadow-cyan-500/10'
               : 'bg-slate-900/50 border-slate-800/80'
           }`}>
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-sm text-cyan-400">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center font-black text-sm text-cyan-400 shrink-0">
                   {gameMode === 'stockfish'
-                    ? (playerColor === 'w' ? <Bot size={18} /> : getInitials(p1Name, 'P1'))
+                    ? (playerColor === 'w' ? <Bot size={20} className="text-cyan-400" /> : getInitials(p1Name, 'P1'))
                     : (isFlipped ? getInitials(p1Name, 'P1') : getInitials(p2Name, 'P2'))}
                 </div>
-                <div className="min-w-0">
-                  <div className="font-bold text-xs truncate">
-                    {gameMode === 'stockfish'
-                      ? (playerColor === 'w' ? 'Stockfish Engine' : p1Name)
-                      : (isFlipped ? p1Name : p2Name)}
-                  </div>
-                  <div className="text-[10px] text-slate-400">
-                    {gameMode === 'stockfish'
-                      ? (playerColor === 'w' ? SKILL_LEVELS[skillIdx].desc : 'Player')
-                      : (isFlipped ? 'White' : 'Black')}
+                <div className="min-w-0 flex-1">
+                  {gameMode === 'stockfish' ? (
+                    playerColor === 'w' ? (
+                      <div>
+                        <div className="font-black text-xs text-white">Stockfish Engine</div>
+                        <div className="text-[10px] text-cyan-400 font-bold">{SKILL_LEVELS[skillIdx].desc}</div>
+                      </div>
+                    ) : (
+                      profiles.length > 0 ? (
+                        <select
+                          value={selectedProfiles[1]}
+                          onChange={(e) => handleProfileChange(1, e.target.value)}
+                          className="bg-transparent font-bold text-xs text-white focus:outline-none cursor-pointer w-full truncate"
+                        >
+                          {profiles.map(p => (
+                            <option key={p.id} value={p.id} className="bg-slate-900 text-white">
+                              {p.name} ({p.xp_balance || 0} XP)
+                            </option>
+                          ))}
+                          <option value="custom" className="bg-slate-900 text-white">Guest Player</option>
+                        </select>
+                      ) : (
+                        <div className="font-bold text-xs text-white truncate">{p1Name}</div>
+                      )
+                    )
+                  ) : (
+                    // Pass & Play Mode: Profile Picker for Top Player
+                    profiles.length > 0 ? (
+                      <select
+                        value={isFlipped ? selectedProfiles[1] : selectedProfiles[2]}
+                        onChange={(e) => handleProfileChange(isFlipped ? 1 : 2, e.target.value)}
+                        className="bg-transparent font-bold text-xs text-white focus:outline-none cursor-pointer w-full truncate"
+                      >
+                        {profiles.map(p => (
+                          <option key={p.id} value={p.id} className="bg-slate-900 text-white">
+                            {p.name} ({p.xp_balance || 0} XP)
+                          </option>
+                        ))}
+                        <option value="custom" className="bg-slate-900 text-white">Guest Player</option>
+                      </select>
+                    ) : (
+                      <div className="font-bold text-xs text-white truncate">{isFlipped ? p1Name : p2Name}</div>
+                    )
+                  )}
+                  <div className="text-[10px] text-slate-400 font-medium">
+                    {isFlipped ? 'White Pieces' : 'Black Pieces'}
                   </div>
                 </div>
               </div>
               {turn === (isFlipped ? 'w' : 'b') && (
-                <span className="flex items-center gap-1 text-[10px] font-bold text-cyan-400 uppercase tracking-widest px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 animate-pulse">
+                <span className="flex items-center gap-1 text-[10px] font-bold text-cyan-400 uppercase tracking-widest px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 animate-pulse shrink-0">
                   Turn
                 </span>
               )}
             </div>
 
-            {/* Captured tray for opponent */}
+            {/* Captured tray for top player */}
             <div className="mt-2 flex items-center gap-1 text-[11px] text-slate-400 min-h-[22px] overflow-x-auto">
               {isFlipped ? (
                 <>
@@ -828,18 +900,26 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
             </div>
           </div>
 
-          {/* Engine Thinking / Hint Status Alert */}
+          {/* Engine Status / Hint Card */}
           <div className="hidden lg:flex flex-col gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 text-xs">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Engine Status</span>
-              {isThinking ? (
-                <span className="flex items-center gap-1.5 text-cyan-400 font-bold text-[11px]">
-                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-                  Calculating...
-                </span>
+              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                {gameMode === 'stockfish' ? 'Engine Status' : 'Match Mode'}
+              </span>
+              {gameMode === 'stockfish' ? (
+                isThinking ? (
+                  <span className="flex items-center gap-1.5 text-cyan-400 font-bold text-[11px]">
+                    <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+                    Calculating...
+                  </span>
+                ) : (
+                  <span className="text-emerald-400 font-bold text-[11px] flex items-center gap-1">
+                    <Check size={12} /> Stockfish Ready
+                  </span>
+                )
               ) : (
                 <span className="text-emerald-400 font-bold text-[11px] flex items-center gap-1">
-                  <Check size={12} /> Ready
+                  <Users size={12} /> 2 Players
                 </span>
               )}
             </div>
@@ -855,40 +935,76 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
             )}
           </div>
 
-          {/* Bottom Player (Human or White) */}
+          {/* Bottom Player Card (You or White) */}
           <div className={`p-2.5 rounded-xl border transition-all ${
             turn === (isFlipped ? 'b' : 'w')
               ? 'bg-slate-800/90 border-cyan-500/60 shadow-lg shadow-cyan-500/10'
               : 'bg-slate-900/50 border-slate-800/80'
           }`}>
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-sm text-cyan-400">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center font-black text-sm text-cyan-400 shrink-0">
                   {gameMode === 'stockfish'
-                    ? (playerColor === 'w' ? getInitials(p1Name, 'P1') : <Bot size={18} />)
+                    ? (playerColor === 'w' ? getInitials(p1Name, 'P1') : <Bot size={20} className="text-cyan-400" />)
                     : (isFlipped ? getInitials(p2Name, 'P2') : getInitials(p1Name, 'P1'))}
                 </div>
-                <div className="min-w-0">
-                  <div className="font-bold text-xs truncate">
-                    {gameMode === 'stockfish'
-                      ? (playerColor === 'w' ? p1Name : 'Stockfish Engine')
-                      : (isFlipped ? p2Name : p1Name)}
-                  </div>
-                  <div className="text-[10px] text-slate-400">
-                    {gameMode === 'stockfish'
-                      ? (playerColor === 'w' ? 'Player (White)' : 'Player (Black)')
-                      : (isFlipped ? 'Black' : 'White')}
+                <div className="min-w-0 flex-1">
+                  {gameMode === 'stockfish' ? (
+                    playerColor === 'w' ? (
+                      profiles.length > 0 ? (
+                        <select
+                          value={selectedProfiles[1]}
+                          onChange={(e) => handleProfileChange(1, e.target.value)}
+                          className="bg-transparent font-bold text-xs text-white focus:outline-none cursor-pointer w-full truncate"
+                        >
+                          {profiles.map(p => (
+                            <option key={p.id} value={p.id} className="bg-slate-900 text-white">
+                              {p.name} ({p.xp_balance || 0} XP)
+                            </option>
+                          ))}
+                          <option value="custom" className="bg-slate-900 text-white">Guest Player</option>
+                        </select>
+                      ) : (
+                        <div className="font-bold text-xs text-white truncate">{p1Name}</div>
+                      )
+                    ) : (
+                      <div>
+                        <div className="font-black text-xs text-white">Stockfish Engine</div>
+                        <div className="text-[10px] text-cyan-400 font-bold">{SKILL_LEVELS[skillIdx].desc}</div>
+                      </div>
+                    )
+                  ) : (
+                    // Pass & Play Mode: Profile Picker for Bottom Player
+                    profiles.length > 0 ? (
+                      <select
+                        value={isFlipped ? selectedProfiles[2] : selectedProfiles[1]}
+                        onChange={(e) => handleProfileChange(isFlipped ? 2 : 1, e.target.value)}
+                        className="bg-transparent font-bold text-xs text-white focus:outline-none cursor-pointer w-full truncate"
+                      >
+                        {profiles.map(p => (
+                          <option key={p.id} value={p.id} className="bg-slate-900 text-white">
+                            {p.name} ({p.xp_balance || 0} XP)
+                          </option>
+                        ))}
+                        <option value="custom" className="bg-slate-900 text-white">Guest Player</option>
+                      </select>
+                    ) : (
+                      <div className="font-bold text-xs text-white truncate">{isFlipped ? p2Name : p1Name}</div>
+                    )
+                  )}
+                  <div className="text-[10px] text-slate-400 font-medium">
+                    {isFlipped ? 'Black Pieces' : 'White Pieces'}
                   </div>
                 </div>
               </div>
               {turn === (isFlipped ? 'b' : 'w') && (
-                <span className="flex items-center gap-1 text-[10px] font-bold text-cyan-400 uppercase tracking-widest px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 animate-pulse">
+                <span className="flex items-center gap-1 text-[10px] font-bold text-cyan-400 uppercase tracking-widest px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 animate-pulse shrink-0">
                   Turn
                 </span>
               )}
             </div>
 
-            {/* Captured tray for player */}
+            {/* Captured tray for bottom player */}
             <div className="mt-2 flex items-center gap-1 text-[11px] text-slate-400 min-h-[22px] overflow-x-auto">
               {!isFlipped ? (
                 <>
@@ -1133,4 +1249,3 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
     </div>
   );
 }
-

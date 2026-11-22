@@ -1,7 +1,8 @@
 /**
  * Stockfish Engine Web Worker Service
  * Manages communication with Stockfish using the Universal Chess Interface (UCI) protocol.
- * Gracefully falls back to CDN or internal fallback evaluator if needed.
+ * Strictly separates position evaluation from engine moves and hints to ensure
+ * the engine only moves when explicitly requested.
  */
 
 export class StockfishService {
@@ -10,11 +11,16 @@ export class StockfishService {
     this.isReady = false;
     this.isThinking = false;
     this.currentSkillLevel = 10;
-    this.onEvaluation = null; // callback(score, mate, depth, pv)
-    this.onBestMove = null;   // callback(bestMoveUci, ponderUci)
+    this.currentMode = 'none'; // 'none' | 'bot_move' | 'hint' | 'eval'
+
+    // Callbacks
+    this.onEvaluation = null; // ({ cp, mate, depth, pv }) => {}
+    this.onBestMove = null;   // (bestMoveUci, ponder) => {}
+    this.onHint = null;       // (bestMoveUci, ponder) => {}
     this.onReady = null;
     this.onError = null;
-    this.outputBuffer = [];
+    this.onFallbackCalculate = null;
+
     this.useFallback = false;
   }
 
@@ -106,16 +112,25 @@ export class StockfishService {
       }
     }
 
-    // Parse Best Move: bestmove e7e5 ponder g1f3
+    // Parse Best Move
     if (line.startsWith('bestmove')) {
+      const mode = this.currentMode;
+      this.currentMode = 'none';
       this.isThinking = false;
+
       const parts = line.split(/\s+/);
       const bestMove = parts[1];
       const ponder = parts[3] || null;
 
-      if (this.onBestMove && bestMove && bestMove !== '(none)') {
+      if (!bestMove || bestMove === '(none)') return;
+
+      // Only invoke onBestMove if we explicitly asked Stockfish to play a move!
+      if (mode === 'bot_move' && this.onBestMove) {
         this.onBestMove(bestMove, ponder);
+      } else if (mode === 'hint' && this.onHint) {
+        this.onHint(bestMove, ponder);
       }
+      // If mode was 'eval', bestmove is intentionally ignored!
     }
   }
 
@@ -127,22 +142,25 @@ export class StockfishService {
   }
 
   startNewGame() {
+    this.stop();
     this.sendCommand('ucinewgame');
     this.sendCommand('isready');
   }
 
   stop() {
+    this.currentMode = 'none';
     this.isThinking = false;
     this.sendCommand('stop');
   }
 
   /**
-   * Request Stockfish to find the best move for a given position.
-   * @param {string} fen Current FEN string
-   * @param {object} options { depth, movetime, skillLevel }
+   * Request Stockfish to calculate and play a move for its turn.
    */
   findBestMove(fen, options = {}) {
+    this.stop();
+    this.currentMode = 'bot_move';
     this.isThinking = true;
+
     const { depth = 10, movetime = 1200, skillLevel = this.currentSkillLevel } = options;
 
     if (skillLevel !== this.currentSkillLevel) {
@@ -150,8 +168,9 @@ export class StockfishService {
     }
 
     if (this.useFallback) {
-      // Worker unavailable, use setTimeout to simulate async thinking
       setTimeout(() => {
+        if (this.currentMode !== 'bot_move') return;
+        this.currentMode = 'none';
         this.isThinking = false;
         if (this.onFallbackCalculate) {
           const move = this.onFallbackCalculate();
@@ -172,10 +191,44 @@ export class StockfishService {
   }
 
   /**
-   * Request live evaluation for current position without making a move
+   * Request Stockfish to suggest a hint move without playing it.
    */
-  evaluatePosition(fen, depth = 12) {
+  findHint(fen, options = {}) {
+    this.stop();
+    this.currentMode = 'hint';
+    this.isThinking = true;
+
+    const { depth = 12, movetime = 1000 } = options;
+
+    if (this.useFallback) {
+      setTimeout(() => {
+        if (this.currentMode !== 'hint') return;
+        this.currentMode = 'none';
+        this.isThinking = false;
+        if (this.onFallbackCalculate) {
+          const move = this.onFallbackCalculate();
+          if (this.onHint && move) {
+            this.onHint(move);
+          }
+        }
+      }, 300);
+      return;
+    }
+
+    this.sendCommand(`position fen ${fen}`);
+    this.sendCommand(`go movetime ${movetime} depth ${depth}`);
+  }
+
+  /**
+   * Request evaluation for current position without making a move or triggering a turn.
+   */
+  evaluatePosition(fen, depth = 10) {
+    if (this.isThinking && (this.currentMode === 'bot_move' || this.currentMode === 'hint')) {
+      return; // Do not interrupt an active move or hint calculation
+    }
     if (this.useFallback) return;
+
+    this.currentMode = 'eval';
     this.sendCommand(`position fen ${fen}`);
     this.sendCommand(`go depth ${depth}`);
   }
@@ -192,4 +245,3 @@ export class StockfishService {
     }
   }
 }
-
