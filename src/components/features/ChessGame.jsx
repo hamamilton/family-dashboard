@@ -9,7 +9,7 @@ import {
   isBlack
 } from '../../lib/chessEngine';
 import { StockfishService } from '../../lib/stockfishService';
-import { ChessPiece } from './ChessPieces';
+import { ChessPiece, PIECE_SKINS } from './ChessPieces';
 import { pb } from '../../lib/pocketbase';
 import {
   Volume2,
@@ -30,19 +30,21 @@ import {
   ShieldAlert,
   Sliders,
   Check,
-  User
+  User,
+  X
 } from 'lucide-react';
 
 const BOARD_THEMES = [
   {
     id: 'cyber',
     name: 'Cyber Slate',
-    light: '#334155', // slate-700
-    dark: '#0f172a',  // slate-900
-    border: 'border-cyan-500/30',
-    highlight: 'rgba(6, 182, 212, 0.45)', // cyan
+    light: '#334155',
+    dark: '#0f172a',
+    border: 'border-cyan-500/40',
+    highlight: 'rgba(6, 182, 212, 0.45)',
     lastMove: 'rgba(56, 189, 248, 0.25)',
-    hint: 'rgba(234, 179, 8, 0.45)'
+    hint: 'rgba(234, 179, 8, 0.45)',
+    pattern: 'radial-gradient(circle at center, rgba(34,211,238,0.06) 1px, transparent 1px)'
   },
   {
     id: 'forest',
@@ -56,23 +58,65 @@ const BOARD_THEMES = [
   },
   {
     id: 'walnut',
-    name: 'Classic Walnut',
+    name: 'Grandmaster Walnut',
     light: '#f0d9b5',
     dark: '#b58863',
-    border: 'border-amber-700/40',
+    border: 'border-amber-700/50',
     highlight: 'rgba(100, 110, 64, 0.5)',
     lastMove: 'rgba(205, 210, 106, 0.45)',
-    hint: 'rgba(14, 165, 233, 0.45)'
+    hint: 'rgba(14, 165, 233, 0.45)',
+    pattern: 'repeating-linear-gradient(45deg, rgba(0,0,0,0.03) 0px, rgba(0,0,0,0.03) 2px, transparent 2px, transparent 6px)'
+  },
+  {
+    id: 'marble',
+    name: 'Carrara Marble',
+    light: '#f1f5f9',
+    dark: '#475569',
+    border: 'border-slate-400/40',
+    highlight: 'rgba(56, 189, 248, 0.4)',
+    lastMove: 'rgba(148, 163, 184, 0.4)',
+    hint: 'rgba(250, 204, 21, 0.45)',
+    pattern: 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, transparent 50%, rgba(0,0,0,0.08) 100%)'
   },
   {
     id: 'neon',
-    name: 'Neon Violet',
-    light: '#581c87', // purple-900
-    dark: '#1e1b4b',  // indigo-950
-    border: 'border-fuchsia-500/40',
+    name: 'Neon Synthwave',
+    light: '#581c87',
+    dark: '#1e1b4b',
+    border: 'border-fuchsia-500/50',
     highlight: 'rgba(217, 70, 239, 0.45)',
     lastMove: 'rgba(168, 85, 247, 0.3)',
     hint: 'rgba(34, 211, 238, 0.45)'
+  },
+  {
+    id: 'arctic',
+    name: 'Arctic Crystal',
+    light: '#e0f2fe',
+    dark: '#0284c7',
+    border: 'border-sky-400/50',
+    highlight: 'rgba(250, 204, 21, 0.5)',
+    lastMove: 'rgba(56, 189, 248, 0.35)',
+    hint: 'rgba(244, 63, 94, 0.45)'
+  },
+  {
+    id: 'lava',
+    name: 'Volcanic Obsidian',
+    light: '#44403c',
+    dark: '#1c1917',
+    border: 'border-orange-500/50',
+    highlight: 'rgba(249, 115, 22, 0.5)',
+    lastMove: 'rgba(234, 88, 12, 0.32)',
+    hint: 'rgba(250, 204, 21, 0.5)'
+  },
+  {
+    id: 'custom',
+    name: 'Custom Board',
+    light: '#e2e8f0',
+    dark: '#334155',
+    border: 'border-cyan-400/40',
+    highlight: 'rgba(56, 189, 248, 0.45)',
+    lastMove: 'rgba(56, 189, 248, 0.25)',
+    hint: 'rgba(234, 179, 8, 0.45)'
   }
 ];
 
@@ -221,12 +265,47 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
   const [gameMode, setGameMode] = useState('stockfish'); // 'stockfish' | 'pvp'
   const [playerColor, setPlayerColor] = useState('w'); // 'w' | 'b' (human in vs-stockfish)
   const [skillIdx, setSkillIdx] = useState(1); // default Casual
-  const [themeIdx, setThemeIdx] = useState(0);
+  const [themeIdx, setThemeIdx] = useState(() => {
+    const saved = localStorage.getItem('chessBoardThemeIdx');
+    const idx = saved !== null ? Number(saved) : 0;
+    return idx >= 0 && idx < BOARD_THEMES.length ? idx : 0;
+  });
+  const [pieceSkin, setPieceSkin] = useState(() => {
+    return localStorage.getItem('chessPieceSkin') || 'classic';
+  });
+  const [customColors, setCustomColors] = useState(() => {
+    try {
+      const saved = localStorage.getItem('chessCustomColors');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      // ignore
+    }
+    return {
+      lightSquare: '#e2e8f0',
+      darkSquare: '#334155',
+      whitePiece: '#38bdf8',
+      blackPiece: '#fb7185'
+    };
+  });
+  const [showSkinModal, setShowSkinModal] = useState(false);
   const [isFlipped, setIsFlipped] = useState(false);
   const [autoFlipTurn, setAutoFlipTurn] = useState(false);
   const [showEvalBar, setShowEvalBar] = useState(true);
   const [isFullViewport, setIsFullViewport] = useState(false);
   const [muted, setMuted] = useState(false);
+
+  // Persist skin selections
+  useEffect(() => {
+    localStorage.setItem('chessBoardThemeIdx', String(themeIdx));
+  }, [themeIdx]);
+
+  useEffect(() => {
+    localStorage.setItem('chessPieceSkin', pieceSkin);
+  }, [pieceSkin]);
+
+  useEffect(() => {
+    localStorage.setItem('chessCustomColors', JSON.stringify(customColors));
+  }, [customColors]);
 
   // Player selection (Pass & Play & vs Stockfish)
   const [selectedProfiles, setSelectedProfiles] = useState({ 1: '', 2: '' });
@@ -611,7 +690,10 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
     syncGameState();
   };
 
-  const theme = BOARD_THEMES[themeIdx];
+  const baseTheme = BOARD_THEMES[themeIdx] || BOARD_THEMES[0];
+  const theme = baseTheme.id === 'custom'
+    ? { ...baseTheme, light: customColors.lightSquare, dark: customColors.darkSquare }
+    : baseTheme;
   const kingInCheckSq = gameStatus.check ? engine.getKingSquare(turn) : -1;
 
   // Material evaluation percentage for the eval bar
@@ -774,13 +856,14 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
             <ArrowUpDown size={14} />
           </button>
 
-          {/* Theme Cycler */}
+          {/* Skins & Board Customizer */}
           <button
-            onClick={() => setThemeIdx((themeIdx + 1) % BOARD_THEMES.length)}
-            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700/60 transition"
-            title={`Theme: ${theme.name}`}
+            onClick={() => setShowSkinModal(true)}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-fuchsia-500/20 hover:bg-fuchsia-500/30 text-fuchsia-300 border border-fuchsia-500/40 font-bold text-xs transition"
+            title="Customize Board & Piece Skins"
           >
-            <Palette size={14} />
+            <Palette size={13} className="text-fuchsia-400" />
+            <span className="hidden sm:inline">Skins</span>
           </button>
 
           {/* Audio Toggle */}
@@ -887,20 +970,24 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
             </div>
 
             {/* Captured tray for top player */}
-            <div className="mt-2 flex items-center gap-1 text-[11px] text-slate-400 min-h-[22px] overflow-x-auto">
+            <div className="mt-2 flex items-center gap-0.5 text-[11px] text-slate-400 min-h-[22px] overflow-x-auto">
               {isFlipped ? (
                 <>
                   {captured.whiteCaptured.map((p, i) => (
-                    <span key={i} className="opacity-80 scale-90">{p}</span>
+                    <span key={i} className="w-4 h-4 inline-flex shrink-0">
+                      <ChessPiece piece={p} skin={pieceSkin} customColors={customColors} />
+                    </span>
                   ))}
-                  {captured.diff > 0 && <span className="font-bold text-emerald-400">+{captured.diff}</span>}
+                  {captured.diff > 0 && <span className="ml-1 font-bold text-emerald-400">+{captured.diff}</span>}
                 </>
               ) : (
                 <>
                   {captured.blackCaptured.map((p, i) => (
-                    <span key={i} className="opacity-80 scale-90">{p}</span>
+                    <span key={i} className="w-4 h-4 inline-flex shrink-0">
+                      <ChessPiece piece={p} skin={pieceSkin} customColors={customColors} />
+                    </span>
                   ))}
-                  {captured.diff < 0 && <span className="font-bold text-emerald-400">+{Math.abs(captured.diff)}</span>}
+                  {captured.diff < 0 && <span className="ml-1 font-bold text-emerald-400">+{Math.abs(captured.diff)}</span>}
                 </>
               )}
             </div>
@@ -1011,20 +1098,24 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
             </div>
 
             {/* Captured tray for bottom player */}
-            <div className="mt-2 flex items-center gap-1 text-[11px] text-slate-400 min-h-[22px] overflow-x-auto">
+            <div className="mt-2 flex items-center gap-0.5 text-[11px] text-slate-400 min-h-[22px] overflow-x-auto">
               {!isFlipped ? (
                 <>
                   {captured.whiteCaptured.map((p, i) => (
-                    <span key={i} className="opacity-80 scale-90">{p}</span>
+                    <span key={i} className="w-4 h-4 inline-flex shrink-0">
+                      <ChessPiece piece={p} skin={pieceSkin} customColors={customColors} />
+                    </span>
                   ))}
-                  {captured.diff > 0 && <span className="font-bold text-emerald-400">+{captured.diff}</span>}
+                  {captured.diff > 0 && <span className="ml-1 font-bold text-emerald-400">+{captured.diff}</span>}
                 </>
               ) : (
                 <>
                   {captured.blackCaptured.map((p, i) => (
-                    <span key={i} className="opacity-80 scale-90">{p}</span>
+                    <span key={i} className="w-4 h-4 inline-flex shrink-0">
+                      <ChessPiece piece={p} skin={pieceSkin} customColors={customColors} />
+                    </span>
                   ))}
-                  {captured.diff < 0 && <span className="font-bold text-emerald-400">+{Math.abs(captured.diff)}</span>}
+                  {captured.diff < 0 && <span className="ml-1 font-bold text-emerald-400">+{Math.abs(captured.diff)}</span>}
                 </>
               )}
             </div>
@@ -1072,7 +1163,11 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
                   <div
                     key={sqIdx}
                     onClick={() => handleSquareClick(sqIdx)}
-                    style={{ backgroundColor: bgSquareColor }}
+                    style={{
+                      backgroundColor: bgSquareColor,
+                      backgroundImage: theme.pattern || undefined,
+                      backgroundSize: theme.id === 'cyber' ? '12px 12px' : undefined
+                    }}
                     className="relative w-full h-full flex items-center justify-center cursor-pointer select-none transition-colors"
                   >
                     {/* Rank / File Coordinate Labels on Outer Edges */}
@@ -1129,7 +1224,7 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
                     {/* Chess Piece Graphic */}
                     {piece && (
                       <div className="relative w-[82%] h-[82%] transition-transform hover:scale-105 active:scale-95">
-                        <ChessPiece piece={piece} />
+                        <ChessPiece piece={piece} skin={pieceSkin} customColors={customColors} />
                       </div>
                     )}
                   </div>
@@ -1153,7 +1248,7 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
                           onClick={() => handlePromotionSelect(type)}
                           className="w-14 h-14 p-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-xl flex items-center justify-center transition-all hover:scale-110 shadow-lg"
                         >
-                          <ChessPiece piece={displayPiece} />
+                          <ChessPiece piece={displayPiece} skin={pieceSkin} customColors={customColors} />
                         </button>
                       );
                     })}
@@ -1212,6 +1307,191 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
           </div>
         </div>
       </div>
+
+      {/* SKINS & BOARD CUSTOMIZER MODAL */}
+      {showSkinModal && (
+        <div className="absolute inset-0 z-40 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 md:p-6">
+          <div className="w-full max-w-2xl max-h-full overflow-y-auto custom-scrollbar bg-slate-900 border border-slate-800 rounded-3xl p-4 md:p-6 shadow-2xl flex flex-col gap-5">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-fuchsia-500/20 border border-fuchsia-500/40 text-fuchsia-400">
+                  <Palette size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white tracking-wide">
+                    Board & Piece Skins Studio
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Mix and match custom piece sets, board finishes, or build your own palette
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSkinModal(false)}
+                className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* SECTION 1: PIECE SKINS */}
+            <div>
+              <div className="text-xs font-black uppercase tracking-wider text-cyan-400 mb-2.5 flex items-center justify-between">
+                <span>1. Piece Skins</span>
+                <span className="text-[10px] text-slate-400 font-normal">
+                  Active: {PIECE_SKINS.find(s => s.id === pieceSkin)?.name}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                {PIECE_SKINS.map((s) => {
+                  const isActive = pieceSkin === s.id;
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => setPieceSkin(s.id)}
+                      className={`p-2.5 rounded-2xl border text-left transition-all flex flex-col gap-2 ${
+                        isActive
+                          ? 'bg-cyan-500/15 border-cyan-400 shadow-lg shadow-cyan-500/10'
+                          : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      {/* Live Piece Preview */}
+                      <div
+                        className="w-full h-12 rounded-xl flex items-center justify-center gap-2 p-1 border border-slate-800/80"
+                        style={{
+                          background: `linear-gradient(90deg, ${theme.dark} 50%, ${theme.light} 50%)`
+                        }}
+                      >
+                        <div className="w-9 h-9">
+                          <ChessPiece piece="N" skin={s.id} customColors={customColors} />
+                        </div>
+                        <div className="w-9 h-9">
+                          <ChessPiece piece="k" skin={s.id} customColors={customColors} />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="font-bold text-xs text-white flex items-center justify-between">
+                          <span className="truncate">{s.name}</span>
+                          {isActive && <Check size={12} className="text-cyan-400 shrink-0" />}
+                        </div>
+                        <div className="text-[10px] text-slate-400 line-clamp-1 mt-0.5">
+                          {s.desc}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Custom Piece Color Pickers */}
+              {pieceSkin === 'custom' && (
+                <div className="mt-3 p-3 rounded-2xl bg-slate-950/90 border border-cyan-500/30 flex flex-wrap items-center gap-4">
+                  <span className="text-xs font-bold text-cyan-300">Custom Piece Colors:</span>
+                  <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                    <input
+                      type="color"
+                      value={customColors.whitePiece}
+                      onChange={(e) => setCustomColors(prev => ({ ...prev, whitePiece: e.target.value }))}
+                      className="w-7 h-7 rounded cursor-pointer bg-transparent border-0"
+                    />
+                    <span>White Team</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                    <input
+                      type="color"
+                      value={customColors.blackPiece}
+                      onChange={(e) => setCustomColors(prev => ({ ...prev, blackPiece: e.target.value }))}
+                      className="w-7 h-7 rounded cursor-pointer bg-transparent border-0"
+                    />
+                    <span>Black Team</span>
+                  </label>
+                </div>
+              )}
+            </div>
+
+            {/* SECTION 2: BOARD SKINS */}
+            <div>
+              <div className="text-xs font-black uppercase tracking-wider text-fuchsia-400 mb-2.5 flex items-center justify-between">
+                <span>2. Board Finishes</span>
+                <span className="text-[10px] text-slate-400 font-normal">
+                  Active: {theme.name}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                {BOARD_THEMES.map((b, idx) => {
+                  const isActive = themeIdx === idx;
+                  const lightCol = b.id === 'custom' ? customColors.lightSquare : b.light;
+                  const darkCol = b.id === 'custom' ? customColors.darkSquare : b.dark;
+                  return (
+                    <button
+                      key={b.id}
+                      onClick={() => setThemeIdx(idx)}
+                      className={`p-2.5 rounded-2xl border text-left transition-all flex items-center gap-2.5 ${
+                        isActive
+                          ? 'bg-fuchsia-500/15 border-fuchsia-400 shadow-lg shadow-fuchsia-500/10'
+                          : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      {/* 2x2 Mini Board Swatch */}
+                      <div className="w-10 h-10 rounded-lg overflow-hidden grid grid-cols-2 grid-rows-2 border border-slate-700 shrink-0 shadow">
+                        <div style={{ backgroundColor: lightCol }} />
+                        <div style={{ backgroundColor: darkCol }} />
+                        <div style={{ backgroundColor: darkCol }} />
+                        <div style={{ backgroundColor: lightCol }} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-bold text-xs text-white truncate flex items-center justify-between">
+                          <span className="truncate">{b.name}</span>
+                          {isActive && <Check size={12} className="text-fuchsia-400 shrink-0" />}
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-mono truncate">
+                          {lightCol} / {darkCol}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Custom Board Color Pickers */}
+              {baseTheme.id === 'custom' && (
+                <div className="mt-3 p-3 rounded-2xl bg-slate-950/90 border border-fuchsia-500/30 flex flex-wrap items-center gap-4">
+                  <span className="text-xs font-bold text-fuchsia-300">Custom Board Squares:</span>
+                  <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                    <input
+                      type="color"
+                      value={customColors.lightSquare}
+                      onChange={(e) => setCustomColors(prev => ({ ...prev, lightSquare: e.target.value }))}
+                      className="w-7 h-7 rounded cursor-pointer bg-transparent border-0"
+                    />
+                    <span>Light Squares</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                    <input
+                      type="color"
+                      value={customColors.darkSquare}
+                      onChange={(e) => setCustomColors(prev => ({ ...prev, darkSquare: e.target.value }))}
+                      className="w-7 h-7 rounded cursor-pointer bg-transparent border-0"
+                    />
+                    <span>Dark Squares</span>
+                  </label>
+                </div>
+              )}
+            </div>
+
+            {/* Done button */}
+            <div className="flex justify-end pt-2 border-t border-slate-800">
+              <button
+                onClick={() => setShowSkinModal(false)}
+                className="px-5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs uppercase tracking-wider transition"
+              >
+                Apply & Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* GAME OVER MODAL */}
       {showGameOverModal && (
