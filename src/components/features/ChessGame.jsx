@@ -349,10 +349,13 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
       const el = boardContainerRef.current;
       if (!el) return;
       const rect = el.getBoundingClientRect();
-      // Account for evaluation bar width (~32px) and top opening banner height (~46px)
-      const availW = rect.width - (showEvalBar ? 36 : 8);
-      const availH = rect.height - 52;
-      const nextSize = Math.max(260, Math.floor(Math.min(availW, availH)));
+      const isMobileWidth = typeof window !== 'undefined' && window.innerWidth < 640;
+      // Eval bar is hidden on <640px (sm), so don't subtract its width on mobile phones
+      const evalBarOffset = !isMobileWidth && showEvalBar ? 34 : 4;
+      const bannerOffset = isMobileWidth ? 56 : 52;
+      const availW = rect.width - evalBarOffset;
+      const availH = rect.height - bannerOffset;
+      const nextSize = Math.max(240, Math.floor(Math.min(availW, availH)));
       setBoardSize(nextSize);
     };
 
@@ -1098,36 +1101,36 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
         </div>
       </div>
 
-      {/* MAIN GAME VIEW: 3-Column Split or Stacked on Mobile */}
-      <div className="flex-1 min-h-0 w-full p-1.5 md:p-3 flex flex-col lg:flex-row items-stretch justify-between gap-3 overflow-hidden">
-        {/* LEFT / SIDEBAR: Player Cards & Profiles */}
-        <div className="w-full lg:w-64 flex-none flex flex-row lg:flex-col justify-between gap-2.5 bg-slate-900/70 border border-slate-800 p-2.5 rounded-2xl overflow-y-auto custom-scrollbar">
+      {/* MAIN GAME VIEW: 3-Column Split on Desktop, Compact Stacked on Mobile */}
+      <div className="flex-1 min-h-0 w-full p-1 sm:p-2 md:p-3 flex flex-col lg:flex-row items-stretch justify-between gap-1.5 sm:gap-3 overflow-hidden">
+        {/* LEFT / SIDEBAR: Player Cards & Profiles (Side-by-side 50/50 row on mobile, column on desktop) */}
+        <div className="w-full lg:w-64 flex-none flex flex-row lg:flex-col justify-between gap-1.5 sm:gap-2.5 bg-slate-900/70 border border-slate-800 p-1.5 sm:p-2.5 rounded-xl sm:rounded-2xl overflow-y-auto custom-scrollbar">
           {/* Top Player Card (Opponent or Black) */}
-          <div className={`p-2.5 rounded-xl border transition-all ${
+          <div className={`flex-1 lg:flex-none min-w-0 p-1.5 sm:p-2.5 rounded-xl border transition-all ${
             turn === (isFlipped ? 'w' : 'b')
               ? 'bg-slate-800/90 border-cyan-500/60 shadow-lg shadow-cyan-500/10'
               : 'bg-slate-900/50 border-slate-800/80'
           }`}>
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0 flex-1">
-                <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center font-black text-sm text-cyan-400 shrink-0">
+            <div className="flex items-center justify-between gap-1.5">
+              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
+                <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center font-black text-xs sm:text-sm text-cyan-400 shrink-0">
                   {gameMode === 'stockfish'
-                    ? (playerColor === 'w' ? <Bot size={20} className="text-cyan-400" /> : getInitials(p1Name, 'P1'))
+                    ? (playerColor === 'w' ? <Bot size={16} className="text-cyan-400" /> : getInitials(p1Name, 'P1'))
                     : (isFlipped ? getInitials(p1Name, 'P1') : getInitials(p2Name, 'P2'))}
                 </div>
                 <div className="min-w-0 flex-1">
                   {gameMode === 'stockfish' ? (
                     playerColor === 'w' ? (
                       <div>
-                        <div className="font-black text-xs text-white">Stockfish Engine</div>
-                        <div className="text-[10px] text-cyan-400 font-bold">{SKILL_LEVELS[skillIdx].desc}</div>
+                        <div className="font-black text-[11px] sm:text-xs text-white truncate">Stockfish</div>
+                        <div className="text-[9px] sm:text-[10px] text-cyan-400 font-bold truncate">{SKILL_LEVELS[skillIdx].name}</div>
                       </div>
                     ) : (
                       profiles.length > 0 ? (
                         <select
                           value={selectedProfiles[1]}
                           onChange={(e) => handleProfileChange(1, e.target.value)}
-                          className="bg-transparent font-bold text-xs text-white focus:outline-none cursor-pointer w-full truncate"
+                          className="bg-transparent font-bold text-[11px] sm:text-xs text-white focus:outline-none cursor-pointer w-full truncate"
                         >
                           {profiles.map(p => (
                             <option key={p.id} value={p.id} className="bg-slate-900 text-white">
@@ -1137,7 +1140,7 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
                           <option value="custom" className="bg-slate-900 text-white">Guest Player</option>
                         </select>
                       ) : (
-                        <div className="font-bold text-xs text-white truncate">{p1Name}</div>
+                        <div className="font-bold text-[11px] sm:text-xs text-white truncate">{p1Name}</div>
                       )
                     )
                   ) : (
@@ -1146,7 +1149,7 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
                       <select
                         value={isFlipped ? selectedProfiles[1] : selectedProfiles[2]}
                         onChange={(e) => handleProfileChange(isFlipped ? 1 : 2, e.target.value)}
-                        className="bg-transparent font-bold text-xs text-white focus:outline-none cursor-pointer w-full truncate"
+                        className="bg-transparent font-bold text-[11px] sm:text-xs text-white focus:outline-none cursor-pointer w-full truncate"
                       >
                         {profiles.map(p => (
                           <option key={p.id} value={p.id} className="bg-slate-900 text-white">
@@ -1156,23 +1159,23 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
                         <option value="custom" className="bg-slate-900 text-white">Guest Player</option>
                       </select>
                     ) : (
-                      <div className="font-bold text-xs text-white truncate">{isFlipped ? p1Name : p2Name}</div>
+                      <div className="font-bold text-[11px] sm:text-xs text-white truncate">{isFlipped ? p1Name : p2Name}</div>
                     )
                   )}
-                  <div className="text-[10px] text-slate-400 font-medium">
+                  <div className="text-[9px] sm:text-[10px] text-slate-400 font-medium">
                     {isFlipped ? 'White Pieces' : 'Black Pieces'}
                   </div>
                 </div>
               </div>
               {turn === (isFlipped ? 'w' : 'b') && (
-                <span className="flex items-center gap-1 text-[10px] font-bold text-cyan-400 uppercase tracking-widest px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 animate-pulse shrink-0">
+                <span className="flex items-center gap-1 text-[9px] sm:text-[10px] font-bold text-cyan-400 uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 animate-pulse shrink-0">
                   Turn
                 </span>
               )}
             </div>
 
             {/* Captured tray for top player */}
-            <div className="mt-2 flex items-center gap-0.5 text-[11px] text-slate-400 min-h-[22px] overflow-x-auto">
+            <div className="mt-1 sm:mt-2 flex items-center gap-0.5 text-[11px] text-slate-400 min-h-[16px] sm:min-h-[22px] overflow-x-auto">
               {isFlipped ? (
                 <>
                   {captured.whiteCaptured.map((p, i) => (
@@ -1302,16 +1305,16 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
           </div>
 
           {/* Bottom Player Card (You or White) */}
-          <div className={`p-2.5 rounded-xl border transition-all ${
+          <div className={`flex-1 lg:flex-none min-w-0 p-1.5 sm:p-2.5 rounded-xl border transition-all ${
             turn === (isFlipped ? 'b' : 'w')
               ? 'bg-slate-800/90 border-cyan-500/60 shadow-lg shadow-cyan-500/10'
               : 'bg-slate-900/50 border-slate-800/80'
           }`}>
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0 flex-1">
-                <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center font-black text-sm text-cyan-400 shrink-0">
+            <div className="flex items-center justify-between gap-1.5">
+              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
+                <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center font-black text-xs sm:text-sm text-cyan-400 shrink-0">
                   {gameMode === 'stockfish'
-                    ? (playerColor === 'w' ? getInitials(p1Name, 'P1') : <Bot size={20} className="text-cyan-400" />)
+                    ? (playerColor === 'w' ? getInitials(p1Name, 'P1') : <Bot size={16} className="text-cyan-400" />)
                     : (isFlipped ? getInitials(p2Name, 'P2') : getInitials(p1Name, 'P1'))}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -1321,7 +1324,7 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
                         <select
                           value={selectedProfiles[1]}
                           onChange={(e) => handleProfileChange(1, e.target.value)}
-                          className="bg-transparent font-bold text-xs text-white focus:outline-none cursor-pointer w-full truncate"
+                          className="bg-transparent font-bold text-[11px] sm:text-xs text-white focus:outline-none cursor-pointer w-full truncate"
                         >
                           {profiles.map(p => (
                             <option key={p.id} value={p.id} className="bg-slate-900 text-white">
@@ -1331,12 +1334,12 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
                           <option value="custom" className="bg-slate-900 text-white">Guest Player</option>
                         </select>
                       ) : (
-                        <div className="font-bold text-xs text-white truncate">{p1Name}</div>
+                        <div className="font-bold text-[11px] sm:text-xs text-white truncate">{p1Name}</div>
                       )
                     ) : (
                       <div>
-                        <div className="font-black text-xs text-white">Stockfish Engine</div>
-                        <div className="text-[10px] text-cyan-400 font-bold">{SKILL_LEVELS[skillIdx].desc}</div>
+                        <div className="font-black text-[11px] sm:text-xs text-white truncate">Stockfish</div>
+                        <div className="text-[9px] sm:text-[10px] text-cyan-400 font-bold truncate">{SKILL_LEVELS[skillIdx].name}</div>
                       </div>
                     )
                   ) : (
@@ -1345,7 +1348,7 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
                       <select
                         value={isFlipped ? selectedProfiles[2] : selectedProfiles[1]}
                         onChange={(e) => handleProfileChange(isFlipped ? 2 : 1, e.target.value)}
-                        className="bg-transparent font-bold text-xs text-white focus:outline-none cursor-pointer w-full truncate"
+                        className="bg-transparent font-bold text-[11px] sm:text-xs text-white focus:outline-none cursor-pointer w-full truncate"
                       >
                         {profiles.map(p => (
                           <option key={p.id} value={p.id} className="bg-slate-900 text-white">
@@ -1355,23 +1358,23 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
                         <option value="custom" className="bg-slate-900 text-white">Guest Player</option>
                       </select>
                     ) : (
-                      <div className="font-bold text-xs text-white truncate">{isFlipped ? p2Name : p1Name}</div>
+                      <div className="font-bold text-[11px] sm:text-xs text-white truncate">{isFlipped ? p2Name : p1Name}</div>
                     )
                   )}
-                  <div className="text-[10px] text-slate-400 font-medium">
+                  <div className="text-[9px] sm:text-[10px] text-slate-400 font-medium">
                     {isFlipped ? 'Black Pieces' : 'White Pieces'}
                   </div>
                 </div>
               </div>
               {turn === (isFlipped ? 'b' : 'w') && (
-                <span className="flex items-center gap-1 text-[10px] font-bold text-cyan-400 uppercase tracking-widest px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 animate-pulse shrink-0">
+                <span className="flex items-center gap-1 text-[9px] sm:text-[10px] font-bold text-cyan-400 uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 animate-pulse shrink-0">
                   Turn
                 </span>
               )}
             </div>
 
             {/* Captured tray for bottom player */}
-            <div className="mt-2 flex items-center gap-0.5 text-[11px] text-slate-400 min-h-[22px] overflow-x-auto">
+            <div className="mt-1 sm:mt-2 flex items-center gap-0.5 text-[11px] text-slate-400 min-h-[16px] sm:min-h-[22px] overflow-x-auto">
               {!isFlipped ? (
                 <>
                   {captured.whiteCaptured.map((p, i) => (
@@ -1478,8 +1481,8 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
                     )}
                   </div>
                   {openingCoach.nextBookMoves?.length > 0 && (
-                    <div className="hidden sm:flex items-center gap-1 shrink-0">
-                      <span className="text-[10px] text-slate-500 font-bold">Book:</span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="hidden sm:inline text-[10px] text-slate-500 font-bold">Book:</span>
                       {openingCoach.nextBookMoves.slice(0, 3).map((bm, i) => (
                         <button
                           key={i}
