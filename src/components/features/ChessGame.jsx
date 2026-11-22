@@ -340,6 +340,34 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
   const [showGameOverModal, setShowGameOverModal] = useState(false);
   const [xpAwarded, setXpAwarded] = useState(false);
   const historyEndRef = useRef(null);
+  const boardContainerRef = useRef(null);
+  const [boardSize, setBoardSize] = useState(560);
+
+  // Dynamically size board to fill available viewport space
+  useEffect(() => {
+    const updateSize = () => {
+      const el = boardContainerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      // Account for evaluation bar width (~32px) and top opening banner height (~46px)
+      const availW = rect.width - (showEvalBar ? 36 : 8);
+      const availH = rect.height - 52;
+      const nextSize = Math.max(260, Math.floor(Math.min(availW, availH)));
+      setBoardSize(nextSize);
+    };
+
+    updateSize();
+    window.addEventListener('resize', updateSize);
+    let observer;
+    if (typeof ResizeObserver !== 'undefined' && boardContainerRef.current) {
+      observer = new ResizeObserver(updateSize);
+      observer.observe(boardContainerRef.current);
+    }
+    return () => {
+      window.removeEventListener('resize', updateSize);
+      if (observer) observer.disconnect();
+    };
+  }, [showEvalBar, isFullViewport]);
 
   // Opening & Defense Coach / Academy state
   const [activeLesson, setActiveLesson] = useState(null); // entry from CHESS_OPENINGS_DB
@@ -1071,9 +1099,9 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
       </div>
 
       {/* MAIN GAME VIEW: 3-Column Split or Stacked on Mobile */}
-      <div className="flex-1 min-h-0 w-full p-2 md:p-4 flex flex-col lg:flex-row items-center justify-center gap-4 overflow-hidden">
+      <div className="flex-1 min-h-0 w-full p-1.5 md:p-3 flex flex-col lg:flex-row items-stretch justify-between gap-3 overflow-hidden">
         {/* LEFT / SIDEBAR: Player Cards & Profiles */}
-        <div className="w-full lg:w-72 flex-none flex flex-row lg:flex-col justify-between gap-3 bg-slate-900/70 border border-slate-800 p-3 rounded-2xl">
+        <div className="w-full lg:w-64 flex-none flex flex-row lg:flex-col justify-between gap-2.5 bg-slate-900/70 border border-slate-800 p-2.5 rounded-2xl overflow-y-auto custom-scrollbar">
           {/* Top Player Card (Opponent or Black) */}
           <div className={`p-2.5 rounded-xl border transition-all ${
             turn === (isFlipped ? 'w' : 'b')
@@ -1367,11 +1395,17 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
           </div>
         </div>
 
-        {/* CENTER: CHESS BOARD & EVALUATION BAR */}
-        <div className="flex items-center justify-center gap-2 max-h-full">
+        {/* CENTER: CHESS BOARD & EVALUATION BAR (Fills Remaining Space) */}
+        <div
+          ref={boardContainerRef}
+          className="flex-1 min-h-0 min-w-0 w-full h-full flex items-center justify-center gap-2 overflow-hidden"
+        >
           {/* Vertical Engine Evaluation Bar */}
           {showEvalBar && (
-            <div className="hidden sm:flex flex-col items-center h-[340px] md:h-[480px] w-5 rounded-full bg-slate-900 border border-slate-800 overflow-hidden relative shadow-inner">
+            <div
+              style={{ height: `${boardSize}px` }}
+              className="hidden sm:flex flex-col items-center w-6 rounded-full bg-slate-900 border border-slate-800 overflow-hidden relative shadow-inner self-end"
+            >
               {/* White evaluation fill */}
               <div
                 className="w-full bg-slate-200 transition-all duration-500"
@@ -1380,7 +1414,7 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
                 }}
               />
               {/* Score text overlay */}
-              <div className="absolute inset-x-0 bottom-1 flex items-center justify-center text-[9px] font-black text-slate-900 select-none">
+              <div className="absolute inset-x-0 bottom-1.5 flex items-center justify-center text-[10px] font-black text-slate-900 select-none">
                 {evalDisplay}
               </div>
             </div>
@@ -1389,7 +1423,10 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
           {/* CHESS BOARD GRID CONTAINER */}
           <div className="relative flex flex-col items-center gap-1.5">
             {/* Compact Live Opening / Guided Lesson Banner Above Board */}
-            <div className="w-[320px] sm:w-[420px] md:w-[480px] lg:w-[500px] px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between gap-2 text-xs">
+            <div
+              style={{ width: `${boardSize}px` }}
+              className="px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between gap-2 text-xs"
+            >
               {activeLesson && guidedLessonStep ? (
                 <div className="flex items-center justify-between w-full gap-2">
                   <div className="min-w-0 flex-1">
@@ -1462,7 +1499,8 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
             </div>
 
             <div
-              className={`relative grid grid-cols-8 grid-rows-8 w-[310px] h-[310px] sm:w-[410px] sm:h-[410px] md:w-[460px] md:h-[460px] lg:w-[475px] lg:h-[475px] rounded-xl overflow-hidden border-2 ${theme.border} shadow-2xl transition-all`}
+              style={{ width: `${boardSize}px`, height: `${boardSize}px` }}
+              className={`relative grid grid-cols-8 grid-rows-8 rounded-xl overflow-hidden border-2 ${theme.border} shadow-2xl transition-colors`}
             >
               {squareIndices.map((sqIdx) => {
                 const { col, row } = squareToColRow(sqIdx);
@@ -1598,7 +1636,7 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
         </div>
 
         {/* RIGHT: MOVE HISTORY & NOTATION */}
-        <div className="hidden lg:flex w-64 h-[480px] flex-col bg-slate-900/70 border border-slate-800 rounded-2xl overflow-hidden">
+        <div className="hidden lg:flex w-56 h-full flex-none flex-col bg-slate-900/70 border border-slate-800 rounded-2xl overflow-hidden">
           <div className="px-3 py-2 border-b border-slate-800 bg-slate-900/90 flex items-center justify-between text-xs font-bold text-slate-300">
             <div className="flex items-center gap-1.5">
               <Swords size={14} className="text-cyan-400" />
