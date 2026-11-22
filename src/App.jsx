@@ -13,9 +13,10 @@ import { LocalEvents } from './components/features/LocalEvents';
 import { LittleVillageEvents } from './components/features/LittleVillageEvents';
 import { AmbientDisplay } from './components/features/AmbientDisplay';
 import { DotsAndBoxes } from './components/features/DotsAndBoxes';
+import { ChessGame } from './components/features/ChessGame';
 import { BreathingOrb, ZenRippleBubbles } from './components/features/MindfulnessGames';
 import { CombinedBoard } from './components/views/CombinedBoard';
-import { RefreshCw, ClipboardList, CalendarDays, Grid, Wind, Waves } from 'lucide-react';
+import { RefreshCw, ClipboardList, CalendarDays, Grid, Wind, Waves, Swords } from 'lucide-react';
 
 function App() {
   const [groupBy, setGroupBy] = useState('day_due');
@@ -274,6 +275,17 @@ function App() {
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800">
                         <button
+                          onClick={() => setActiveGame('chess')}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            activeGame === 'chess'
+                              ? 'bg-amber-400 text-black shadow-sm'
+                              : 'text-slate-300 hover:text-white'
+                          }`}
+                        >
+                          <Swords size={14} />
+                          <span>Chess (Stockfish)</span>
+                        </button>
+                        <button
                           onClick={() => setActiveGame('dots')}
                           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                             activeGame === 'dots'
@@ -311,6 +323,9 @@ function App() {
 
                     {/* Active Game / Mindfulness View */}
                     <div className="flex-1 min-h-0 w-full h-full flex flex-col overflow-hidden">
+                      {activeGame === 'chess' && (
+                        <ChessGame profiles={profiles} isDarkMode={isDarkMode} />
+                      )}
                       {activeGame === 'dots' && (
                         <DotsAndBoxes profiles={profiles} isDarkMode={isDarkMode} />
                       )}
