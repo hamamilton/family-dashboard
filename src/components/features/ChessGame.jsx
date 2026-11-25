@@ -439,6 +439,8 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
   const [latestMoveFeedback, setLatestMoveFeedback] = useState(null);
   const [hoveredBookMove, setHoveredBookMove] = useState(null); // { from, to, san, note }
   const lastEvalCpRef = useRef(0);
+  const gameConfigRef = useRef({ gameMode, playerColor });
+  gameConfigRef.current = { gameMode, playerColor };
 
   // Initialize profiles
   useEffect(() => {
@@ -497,18 +499,25 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
       const numericCp = cp !== null ? cp : (mate !== null ? (mate > 0 ? 2000 : -2000) : 0);
       setEvalScore({ cp: cp !== null ? cp : 0, mate });
       // Update quality of the most recent move once Stockfish evaluates the new position
+      // (In 1-player mode vs Stockfish, do not analyze moves made by Stockfish)
       const histLen = engine.history.length;
       if (histLen > 0) {
         const lastRecord = engine.history[histLen - 1];
-        const plyIdx = histLen - 1;
-        const playedSans = engine.history.map(h => (h.san || '').replace(/[+#?!]/g, '').trim());
-        const isBook = CHESS_OPENINGS_DB.some(entry =>
-          entry.moves.length >= histLen &&
-          entry.moves.slice(0, histLen).every((m, idx) => m.replace(/[+#?!]/g, '').trim() === playedSans[idx])
-        );
-        const analysis = analyzePlayedMove(lastRecord, isBook, lastEvalCpRef.current, numericCp);
-        setMoveQualities(prev => ({ ...prev, [plyIdx]: analysis }));
-        setLatestMoveFeedback({ san: lastRecord.san, ...analysis });
+        const moverColor = isWhite(lastRecord.piece) ? 'w' : 'b';
+        const { gameMode: curMode, playerColor: curPlayerColor } = gameConfigRef.current;
+        const isStockfishMove = curMode === 'stockfish' && moverColor !== curPlayerColor;
+
+        if (!isStockfishMove) {
+          const plyIdx = histLen - 1;
+          const playedSans = engine.history.map(h => (h.san || '').replace(/[+#?!]/g, '').trim());
+          const isBook = CHESS_OPENINGS_DB.some(entry =>
+            entry.moves.length >= histLen &&
+            entry.moves.slice(0, histLen).every((m, idx) => m.replace(/[+#?!]/g, '').trim() === playedSans[idx])
+          );
+          const analysis = analyzePlayedMove(lastRecord, isBook, lastEvalCpRef.current, numericCp);
+          setMoveQualities(prev => ({ ...prev, [plyIdx]: analysis }));
+          setLatestMoveFeedback({ san: lastRecord.san, ...analysis });
+        }
       }
       lastEvalCpRef.current = numericCp;
     };
@@ -563,14 +572,20 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
       if (curHistory.length > 0) {
         const plyIdx = curHistory.length - 1;
         const lastRecord = curHistory[plyIdx];
-        const playedSans = curHistory.map(h => (h.san || '').replace(/[+#?!]/g, '').trim());
-        const isBook = CHESS_OPENINGS_DB.some(entry =>
-          entry.moves.length >= curHistory.length &&
-          entry.moves.slice(0, curHistory.length).every((m, idx) => m.replace(/[+#?!]/g, '').trim() === playedSans[idx])
-        );
-        const initialAnalysis = analyzePlayedMove(lastRecord, isBook, null, null);
-        setMoveQualities(prev => (prev[plyIdx] ? prev : { ...prev, [plyIdx]: initialAnalysis }));
-        setLatestMoveFeedback({ san: lastRecord.san, ...initialAnalysis });
+        const moverColor = isWhite(lastRecord.piece) ? 'w' : 'b';
+        const { gameMode: curMode, playerColor: curPlayerColor } = gameConfigRef.current;
+        const isStockfishMove = curMode === 'stockfish' && moverColor !== curPlayerColor;
+
+        if (!isStockfishMove) {
+          const playedSans = curHistory.map(h => (h.san || '').replace(/[+#?!]/g, '').trim());
+          const isBook = CHESS_OPENINGS_DB.some(entry =>
+            entry.moves.length >= curHistory.length &&
+            entry.moves.slice(0, curHistory.length).every((m, idx) => m.replace(/[+#?!]/g, '').trim() === playedSans[idx])
+          );
+          const initialAnalysis = analyzePlayedMove(lastRecord, isBook, null, null);
+          setMoveQualities(prev => (prev[plyIdx] ? prev : { ...prev, [plyIdx]: initialAnalysis }));
+          setLatestMoveFeedback({ san: lastRecord.san, ...initialAnalysis });
+        }
       }
       if (status.check) {
         chessAudio.playCheck();
@@ -1872,8 +1887,8 @@ export function ChessGame({ profiles = [], isDarkMode = true }) {
                 const bPly = moveIdx * 2 + 1;
                 const whiteMove = history[wPly];
                 const blackMove = history[bPly];
-                const wQual = moveQualities[wPly];
-                const bQual = moveQualities[bPly];
+                const wQual = (gameMode === 'stockfish' && playerColor !== 'w') ? null : moveQualities[wPly];
+                const bQual = (gameMode === 'stockfish' && playerColor !== 'b') ? null : moveQualities[bPly];
                 return (
                   <div
                     key={moveIdx}
